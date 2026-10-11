@@ -234,10 +234,14 @@ Each phase ends with something demoable and its exit criteria.
 - `apps/web`: Vite + React, placeholder list that loads the snapshot through the dev proxy.
 - **Exit met:** `npm run dev` runs both, 14 tests pass, typecheck and build are clean. CI has never run because there's no remote yet.
 
-### Phase 1: Read-only app, online (≈1 week)
+### Phase 1: Read-only app, online ✅ done 2026-10-11
 
 - Schedule, Lineup, Session detail and Vendors screens rendering from the snapshot, with festival-timezone handling and estimated end times.
-- **Exit:** schedule is browsable on mobile and desktop widths.
+- Schedule has day tabs, a kind filter and two layouts: a list grouped by start time, and a "By stage" timeline with sticky stage and hour headers. Both remember the choice per device. During the festival it shows an "On now / Up next" panel, dims sessions that have ended, and draws a now-line on the timeline.
+- **Pretend clock for demos:** `?now=2026-06-20T20:40` (festival-local time) sets the clock and keeps it ticking from there. `?now=off`, or the banner's button, resets it.
+- Shared logic in `packages/shared/src/schedule.ts`, unit-tested: estimated ends (next start on the same stage, capped at 45 min for music and 60 min for rituals and workshops), the current festival day, on now / up next, and lineup grouping.
+- Routing with wouter. A JS bundle of 101 KB gzipped, within budget. Most of it is React and Zod; switching to `zod/mini` on the client would save about 15–20 KB if needed.
+- **Exit met:** checked in the browser at 375px and desktop widths, in dark and light themes.
 
 ### Phase 2: Offline-first foundation (≈1 week)
 
