@@ -1,5 +1,8 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "types": ["node"] },
-  "include": ["scripts", "vitest.config.ts"]
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["scripts", "e2e", "vitest.config.ts", "playwright.config.ts"]
 }

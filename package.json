@@ -11,15 +11,20 @@
     "dev:server": "npm run dev -w @nemeton/server",
     "dev:web": "npm run dev -w @nemeton/web",
     "build": "npm run build -w @nemeton/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "tsc -p . && npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "import:csv": "tsx scripts/import-csv.ts data/raw/cascadian-midsummer-2026.csv --out data/seed/festival.json"
+    "import:csv": "tsx scripts/import-csv.ts data/raw/cascadian-midsummer-2026.csv --out data/seed/festival.json",
+    "start:server": "npm run start -w @nemeton/server",
+    "preview": "npm run build && concurrently -k -n server,web -c green,blue \"npm:start:server\" \"npm run preview -w @nemeton/web\"",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.5",
     "concurrently": "^10.0.6",
+    "fake-indexeddb": "^6.2.5",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

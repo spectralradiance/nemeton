@@ -861,3 +861,115 @@ h2 {
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
 }
+
+/* ---------- Phase 2: offline, install, settings ---------- */
+
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-link {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.icon-link:hover,
+.icon-link[aria-current='page'] {
+  color: var(--fg);
+  background: var(--surface-2);
+}
+
+.sync-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--warn);
+  border: 1px solid currentColor;
+}
+.sync-chip[data-offline] {
+  color: var(--muted);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 30;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--gutter));
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--fg);
+  color: var(--bg);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
+  font-size: 0.9rem;
+}
+.toast .button {
+  padding: 6px 12px;
+}
+@media (max-width: 699px) {
+  .toast {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px);
+  }
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.button-danger {
+  color: var(--danger);
+  border-color: currentColor;
+  background: transparent;
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings {
+  max-width: 40rem;
+}
+.card {
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+}
+.card p {
+  margin: 0 0 12px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 10px 0 0 !important;
+}
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.progress-row progress {
+  flex: 1;
+  accent-color: var(--accent);
+}

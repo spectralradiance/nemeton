@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 5317,
       "autoPort": true
+    },
+    {
+      "name": "nemeton-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
+      "port": 5318,
+      "autoPort": true
     }
   ]
 }

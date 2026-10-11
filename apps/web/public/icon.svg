@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed background so maskable crops never show a gap. Artwork stays inside the safe zone. -->
+  <rect width="512" height="512" fill="#11130e"/>
+  <g transform="translate(256 256) scale(1.22) translate(-256 -241)">
+  <circle cx="256" cy="232" r="116" fill="#e0a35e"/>
+  <g fill="#0b0d08">
+    <!-- centre pine -->
+    <path d="M256 128 298 206h-84zM256 168l62 98H194zM256 216l84 120H172z"/>
+    <rect x="246" y="334" width="20" height="30"/>
+    <!-- left pine -->
+    <path d="M168 208l32 56h-64zM168 240l46 76h-92z"/>
+    <rect x="161" y="314" width="14" height="50"/>
+    <!-- right pine -->
+    <path d="M344 208l32 56h-64zM344 240l46 76h-92z"/>
+    <rect x="337" y="314" width="14" height="50"/>
+    <!-- ground -->
+    <rect x="96" y="352" width="320" height="14" rx="7"/>
+  </g>
+  </g>
+</svg>

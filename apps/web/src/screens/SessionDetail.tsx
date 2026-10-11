@@ -140,6 +140,7 @@ function Photo({ src, alt }: { src: string; alt: string }) {
       src={src}
       alt={alt}
       decoding="async"
+      crossOrigin="anonymous"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />

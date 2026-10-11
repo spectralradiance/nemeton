@@ -1,16 +1,19 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  Snapshot,
   buildLineup,
   estimateEnds,
   type LineupEntry,
   type Session,
   type SessionEnd,
+  type Snapshot,
   type Stage,
 } from '@nemeton/shared';
+import { db, readSnapshot } from './db';
+import { requestSync, startBackgroundSync, useSyncStatus } from './sync';
 
-// Phase 1 loads from the network on every start. Phase 2 swaps the source for IndexedDB with
-// background revalidation; screens only see `useSchedule()` and shouldn't notice.
+// Offline-first: screens render from IndexedDB, which updates reactively whenever a background
+// sync writes a new schedule. The network is never on the path to first paint once data exists.
 
 export interface Schedule {
   snapshot: Snapshot;
@@ -20,40 +23,39 @@ export interface Schedule {
   lineup: LineupEntry[];
 }
 
-type State =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; schedule: Schedule };
-
 const ScheduleContext = createContext<Schedule | null>(null);
 
 export function ScheduleProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<State>({ status: 'loading' });
+  // undefined while IndexedDB is being read; null when nothing is stored yet.
+  const snapshot = useLiveQuery(() => readSnapshot(db), [], undefined);
+  const sync = useSyncStatus();
+  const schedule = useMemo(() => (snapshot ? index(snapshot) : null), [snapshot]);
 
-  const load = useCallback(() => {
-    setState({ status: 'loading' });
-    fetch('/api/schedule/snapshot')
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((json) => setState({ status: 'ready', schedule: index(Snapshot.parse(json)) }))
-      .catch((err: Error) => setState({ status: 'error', message: err.message }));
-  }, []);
+  useEffect(() => startBackgroundSync(db), []);
 
-  useEffect(load, [load]);
-
-  if (state.status === 'loading') {
-    return <p className="page-message">Loading the schedule…</p>;
-  }
-  if (state.status === 'error') {
+  if (snapshot === undefined) return null; // a local read; usually done before the first frame
+  if (!schedule) {
     return (
-      <div className="page-message" role="alert">
-        <p>Couldn't load the schedule ({state.message}).</p>
-        <button className="button" onClick={load}>
-          Try again
-        </button>
+      <div className="page-message" role={sync.error ? 'alert' : 'status'}>
+        {sync.error ? (
+          <>
+            <h1 className="page-title">No schedule on this device yet</h1>
+            <p>
+              Connect to the internet once to download it. After that it works offline.
+              <br />
+              <span className="muted">({sync.error})</span>
+            </p>
+            <button className="button" onClick={() => void requestSync(db).catch(() => {})}>
+              Try again
+            </button>
+          </>
+        ) : (
+          <p>Downloading the schedule…</p>
+        )}
       </div>
     );
   }
-  return <ScheduleContext.Provider value={state.schedule}>{children}</ScheduleContext.Provider>;
+  return <ScheduleContext.Provider value={schedule}>{children}</ScheduleContext.Provider>;
 }
 
 export function useSchedule(): Schedule {

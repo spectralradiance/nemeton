@@ -243,12 +243,28 @@ Each phase ends with something demoable and its exit criteria.
 - Routing with wouter. A JS bundle of 101 KB gzipped, within budget. Most of it is React and Zod; switching to `zod/mini` on the client would save about 15–20 KB if needed.
 - **Exit met:** checked in the browser at 375px and desktop widths, in dark and light themes.
 
-### Phase 2: Offline-first foundation (≈1 week)
+### Phase 2: Offline-first foundation ✅ done 2026-10-11 (real-device install checks pending)
 
-- `vite-plugin-pwa` (injectManifest), manifest, icons, precache, image runtime cache, update prompt.
-- Dexie schema. Load into IDB, render from IDB via `liveQuery`.
-- `storage.persist()`, install UX, offline indicator.
-- **Exit:** after one visit, airplane mode → hard reload → the full app works. The app installs on Android Chrome, iOS Safari and desktop Chrome.
+- `vite-plugin-pwa` in injectManifest mode with our own `src/sw.ts`:
+  - It precaches the app shell, and every in-app navigation gets the cached `index.html`, so deep links work offline.
+  - Photos are cached cache-first, as CORS responses, never opaque ones. Wix sends `Access-Control-Allow-Origin: *`.
+  - New versions wait for the user's OK (the "Reload" toast). Registration errors are logged.
+- Icons (favicon, 192/512, maskable, Apple touch) are generated from `public/icon.svg` at build time.
+- Dexie stores the schedule in `festival`, `stages`, `sessions`, `vendors` and `meta`. Screens render from IndexedDB through `useLiveQuery`, so the network is never on the path to first paint once data exists.
+  - Writes replace everything in one transaction.
+  - The stored `DATA_VERSION` makes an app update that changes the data shape re-download the schedule instead of misreading it.
+- **Interim stale-while-revalidate:** a full snapshot download with `If-None-Match`, run on start, on reconnect, on return to the app and every 5 minutes. It ignores a response with a lower `seq` than what's stored. Phase 3 replaces it with deltas.
+- **Settings screen:**
+  - Last checked, plus "Check now".
+  - "Save all photos now": 44 photos, about 4.7 MB as AVIF.
+  - Install: a button on Chromium, instructions on iOS.
+  - Storage usage and `storage.persist()`.
+  - Clear saved data.
+- An "Offline" or "Not updated" chip appears in the header only when something's wrong.
+- **Tests:** 8 new unit tests for IndexedDB and sync (with fake-indexeddb). Playwright e2e runs against a production build, with desktop and Pixel 7 profiles: offline hard reload, offline deep links and search, saved photos offline, and an installable manifest. Locally it uses the installed Edge; CI installs Chromium.
+- **Bundle:** 137 KB gzipped (Dexie added about 35 KB). It's close to the 150 KB budget, so Phase 3 should consider `zod/mini` on the client.
+- `npm run preview` builds and serves the production app on port 5318 with the API. The service worker is off in dev on purpose.
+- **Exit:** the offline criteria are met and covered by e2e. Installing on a real Android phone, iPhone and desktop Chrome **still needs a manual check on devices**. The manifest and icons pass the automated installability check.
 
 ### Phase 3: Deltas and SWR (≈1 week)
 

@@ -3,6 +3,7 @@ import { Link, useLocation, useSearch } from 'wouter';
 import { useSchedule } from '../data/schedule';
 import { applyClockParam, resetClock, useClockOffset, useNow } from '../lib/clock';
 import { formatDateTime } from '../lib/format';
+import { useSyncStatus } from '../data/sync';
 import { festivalDayAt } from '@nemeton/shared';
 
 const NAV = [
@@ -44,24 +45,52 @@ export function Shell({ children }: { children: ReactNode }) {
         <Link href="/schedule" className="brand">
           {festival.name}
         </Link>
-        <nav className="nav" aria-label="Main">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="nav-link"
-              aria-current={item.match(location) ? 'page' : undefined}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="topbar-end">
+          <SyncChip />
+          <nav className="nav" aria-label="Main">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="nav-link"
+                aria-current={item.match(location) ? 'page' : undefined}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <Link
+            href="/settings"
+            className="icon-link"
+            aria-label="Settings"
+            aria-current={location.startsWith('/settings') ? 'page' : undefined}
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.8 1.7 1l.4 2.5h4l.4-2.5c.6-.2 1.2-.6 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"
+                transform="translate(-1 0)"
+              />
+            </svg>
+          </Link>
+        </div>
       </header>
       <ClockBanner />
       <main id="main" className="main">
         {children}
       </main>
     </>
+  );
+}
+
+/** Quiet when all is well; says so when the schedule shown might be out of date. */
+function SyncChip() {
+  const { online, error } = useSyncStatus();
+  if (online && !error) return null;
+  return (
+    <Link href="/settings" className="sync-chip" data-offline={!online || undefined}>
+      {online ? 'Not updated' : 'Offline'}
+    </Link>
   );
 }
 
