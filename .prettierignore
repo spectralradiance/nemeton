@@ -1,0 +1,4 @@
+data/
+package-lock.json
+dist/
+dev-dist/

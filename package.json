@@ -1,0 +1,28 @@
+{
+  "name": "nemeton",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c green,blue \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @nemeton/server",
+    "dev:web": "npm run dev -w @nemeton/web",
+    "build": "npm run build -w @nemeton/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "import:csv": "tsx scripts/import-csv.ts data/raw/cascadian-midsummer-2026.csv --out data/seed/festival.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "concurrently": "^10.0.6",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

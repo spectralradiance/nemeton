@@ -1,0 +1,16 @@
+{
+  "name": "@nemeton/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --include ../../data/seed/festival.json src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "@nemeton/shared": "*",
+    "hono": "^4.13.13"
+  }
+}

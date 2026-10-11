@@ -1,0 +1,63 @@
+:root {
+  --bg: #f7f5f0;
+  --fg: #1d1b18;
+  --muted: #6b665d;
+  --line: #ddd8cc;
+  --tag-bg: #e6e0d2;
+  font-family: system-ui, sans-serif;
+  line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14130f;
+    --fg: #ece8de;
+    --muted: #9c968a;
+    --line: #2d2b25;
+    --tag-bg: #2d2b25;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.sessions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sessions li {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--tag-bg);
+  font-size: 0.8em;
+}
