@@ -1,10 +1,14 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import type { ChangesResponse, SnapshotResponse } from '@nemeton/shared';
+import { ChangeHub } from './hub';
 import { StoreError, type Organizer, type Store } from './store';
 
 type Env = { Variables: { organizer: Organizer } };
 
-export function createApp(store: Store) {
+const HEARTBEAT_MS = 25_000;
+
+export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEARTBEAT_MS) {
   const app = new Hono<Env>().basePath('/api');
 
   app.get('/health', (c) => c.json({ ok: true, epoch: store.epoch, seq: store.seq }));
@@ -38,6 +42,53 @@ export function createApp(store: Store) {
     return c.json(body);
   });
 
+  // ---------- public: live updates (Server-Sent Events) ----------
+  //
+  // On connect, replays everything after the client's seq (Last-Event-ID on automatic reconnects,
+  // ?since on the first connection), then pushes each batch as it's published. Event ids are the
+  // batch's `to` seq, so a browser reconnecting after a dropped connection resumes exactly there.
+
+  app.get('/events', (c) => {
+    const lastId = c.req.header('Last-Event-ID') ?? c.req.query('since');
+    const since = Number(lastId);
+    const epoch = c.req.query('epoch');
+
+    return streamSSE(c, async (stream) => {
+      const send = (batch: ChangesResponse) =>
+        stream.writeSSE({ event: 'changes', id: String(batch.to), data: JSON.stringify(batch) });
+
+      // Buffer live batches until the replay has been sent, so nothing arrives out of order.
+      const pending: ChangesResponse[] = [];
+      let replayed = false;
+      const unsubscribe = hub.subscribe((batch) => {
+        if (replayed) void send(batch);
+        else pending.push(batch);
+      });
+      stream.onAbort(unsubscribe);
+
+      const missed =
+        Number.isInteger(since) && since >= 0 && (epoch === undefined || epoch === store.epoch)
+          ? store.changesSince(since)
+          : null;
+      if (!missed) {
+        // Can't bridge the gap from here: the client should start over from a full download.
+        await stream.writeSSE({ event: 'reset', data: JSON.stringify({ epoch: store.epoch }) });
+        unsubscribe();
+        return;
+      }
+      const to = missed.at(-1)?.seq ?? since;
+      if (missed.length > 0) await send({ epoch: store.epoch, from: since, to, changes: missed });
+      for (const batch of pending.filter((b) => b.to > to)) await send(batch);
+      replayed = true;
+
+      // Comments keep proxies and mobile networks from closing an idle connection.
+      while (!stream.aborted) {
+        await stream.sleep(heartbeatMs);
+        if (!stream.aborted) await stream.write(': ping\n\n');
+      }
+    });
+  });
+
   // ---------- organizers ----------
 
   app.use('/admin/*', async (c, next) => {
@@ -63,6 +114,7 @@ export function createApp(store: Store) {
     }
     const { name } = c.get('organizer');
     const result = store.apply(body.changes, name, body.baseSeq as number | undefined);
+    hub.publish({ epoch: store.epoch, ...result });
     return c.json({ from: result.from, to: result.to, count: result.changes.length });
   });
 

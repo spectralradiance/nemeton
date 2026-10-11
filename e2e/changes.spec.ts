@@ -47,7 +47,7 @@ test('an organizer change shows up in an open app without reloading', async ({
   // A refresh trigger the app listens for (coming back online).
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
 
-  await expect(page.getByText('Cancelled due to high winds')).toBeVisible();
+  await expect(page.locator('.status-banner')).toContainText('Cancelled due to high winds');
   // Same DOM node: updated in place, not reloaded or remounted.
   expect(
     await page.evaluate(

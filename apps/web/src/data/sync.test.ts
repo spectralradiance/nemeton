@@ -5,7 +5,7 @@ import { Snapshot, type ChangeInput } from '@nemeton/shared';
 import { createApp } from '@nemeton/server/app';
 import { Store } from '@nemeton/server/store';
 import { DATA_VERSION, NemetonDB, readSnapshot, writeSnapshot } from './db';
-import { syncSchedule } from './sync';
+import { handleLiveBatch, onScheduleChanged, syncSchedule } from './sync';
 
 // Client sync runs against the real server app (in-memory SQLite), so both sides of the
 // change-log protocol are tested together.
@@ -62,7 +62,8 @@ describe('IndexedDB storage', () => {
 describe('syncSchedule', () => {
   it('downloads the full schedule the first time', async () => {
     expect(await syncSchedule(db, fetchImpl)).toBe('updated');
-    expect(requests).toEqual(['/api/schedule/snapshot']);
+    // The schedule, then recent history for the Updates feed.
+    expect(requests).toEqual(['/api/schedule/snapshot', '/api/schedule/changes']);
     expect((await readSnapshot(db))?.sessions).toHaveLength(seed.sessions.length);
     expect(await db.meta.get('sync')).toMatchObject({ seq: 0, epoch: store.epoch });
   });
@@ -95,7 +96,11 @@ describe('syncSchedule', () => {
     }));
     requests = [];
     expect(await syncSchedule(db, serve(reset))).toBe('updated');
-    expect(requests).toEqual(['/api/schedule/changes', '/api/schedule/snapshot']);
+    expect(requests).toEqual([
+      '/api/schedule/changes',
+      '/api/schedule/snapshot',
+      '/api/schedule/changes',
+    ]);
     expect((await readSnapshot(db))?.festival.name).toBe('After reset');
     expect((await db.meta.get('sync'))?.epoch).toBe(reset.epoch);
   });
@@ -110,7 +115,7 @@ describe('syncSchedule', () => {
       return Response.json({ ...(await res.json()), from: 5 });
     };
     expect(await syncSchedule(db, gappy)).toBe('updated');
-    expect(requests.at(-1)).toBe('/api/schedule/snapshot');
+    expect(requests.slice(-2)).toEqual(['/api/schedule/snapshot', '/api/schedule/changes']);
     expect((await readSnapshot(db))?.vendors.some((v) => v.id === 'corviid')).toBe(false);
   });
 
@@ -133,5 +138,87 @@ describe('syncSchedule', () => {
   it('reports server errors', async () => {
     const down: typeof fetch = async () => new Response(null, { status: 503 });
     await expect(syncSchedule(db, down)).rejects.toThrow('503');
+  });
+});
+
+describe('Updates feed', () => {
+  it('records what each applied session change was before and after', async () => {
+    await syncSchedule(db, fetchImpl);
+    publish({ op: 'upsert', entity: 'session', id: hail.id, data: { ...hail, stageId: 'meadow' } });
+    publish({ op: 'delete', entity: 'vendor', id: 'corviid' }); // not a session: not in the feed
+    await syncSchedule(db, fetchImpl);
+    const feed = await db.feed.toArray();
+    expect(feed).toHaveLength(1);
+    expect(feed[0]).toMatchObject({ sessionId: hail.id, op: 'upsert' });
+    expect(feed[0]!.before?.stageId).toBe('stage-1');
+    expect(feed[0]!.after?.stageId).toBe('meadow');
+  });
+
+  it('announces applied changes, but not the initial download', async () => {
+    const heard: string[] = [];
+    const stop = onScheduleChanged((items) => heard.push(...items.map((i) => i.sessionId)));
+    try {
+      publish({ op: 'upsert', entity: 'session', id: hail.id, data: { ...hail, status: 'delayed' } });
+      await syncSchedule(db, fetchImpl); // fresh install: downloads, doesn't announce
+      expect(heard).toEqual([]);
+      publish({ op: 'delete', entity: 'session', id: 'gethen-fri' });
+      await syncSchedule(db, fetchImpl);
+      expect(heard).toEqual(['gethen-fri']);
+    } finally {
+      stop();
+    }
+  });
+
+  it('fills the feed with recent history on a fresh download', async () => {
+    publish({ op: 'upsert', entity: 'session', id: hail.id, data: { ...hail, status: 'cancelled' } });
+    await syncSchedule(db, fetchImpl);
+    const feed = await db.feed.toArray();
+    expect(feed.map((f) => f.sessionId)).toEqual([hail.id]);
+    expect(feed[0]!.after?.status).toBe('cancelled');
+  });
+});
+
+describe('handleLiveBatch', () => {
+  const batchFor = (since: number) => {
+    const changes = store.changesSince(since)!;
+    return { epoch: store.epoch, from: since, to: changes.at(-1)?.seq ?? since, changes };
+  };
+
+  it('applies a batch that follows on from what is stored', async () => {
+    await syncSchedule(db, fetchImpl);
+    publish({ op: 'upsert', entity: 'session', id: hail.id, data: { ...hail, status: 'delayed' } });
+    expect(await handleLiveBatch(db, batchFor(0), async () => {})).toBe('applied');
+    expect((await stored(hail.id))?.status).toBe('delayed');
+  });
+
+  it('skips a batch it already has', async () => {
+    publish({ op: 'upsert', entity: 'session', id: hail.id, data: { ...hail, status: 'delayed' } });
+    await syncSchedule(db, fetchImpl); // already at seq 1
+    expect(await handleLiveBatch(db, batchFor(0), async () => {})).toBe('duplicate');
+  });
+
+  it('catches up instead of applying across a gap', async () => {
+    await syncSchedule(db, fetchImpl);
+    publish({ op: 'upsert', entity: 'session', id: hail.id, data: { ...hail, status: 'delayed' } });
+    publish({ op: 'delete', entity: 'vendor', id: 'corviid' });
+    let caughtUp = false;
+    const result = await handleLiveBatch(db, batchFor(1), async () => {
+      caughtUp = true;
+    });
+    expect(result).toBe('gap');
+    expect(caughtUp).toBe(true);
+    expect((await db.meta.get('sync'))?.seq).toBe(0); // nothing applied out of order
+  });
+
+  it('starts over when the batch is from another server database', async () => {
+    await syncSchedule(db, fetchImpl);
+    let caughtUp = false;
+    const other = { epoch: 'other', from: 0, to: 1, changes: [] };
+    expect(
+      await handleLiveBatch(db, other, async () => {
+        caughtUp = true;
+      }),
+    ).toBe('gap');
+    expect(caughtUp).toBe(true);
   });
 });

@@ -30,12 +30,31 @@ export interface SyncMeta {
 
 type FestivalRow = Festival & { key: 'festival' };
 
+/**
+ * One official change to a session, for the Updates feed and change toasts. `before` is known for
+ * changes this device applied itself; history downloaded with a fresh install only has `after`.
+ */
+export interface FeedItem {
+  seq: number;
+  at: string;
+  sessionId: string;
+  op: 'upsert' | 'delete';
+  before?: Session;
+  after?: Session;
+  /** A session that didn't exist before this change. Unknown (undefined) for downloaded history. */
+  added?: boolean;
+}
+
+/** How many feed items to keep on the device. */
+export const FEED_LIMIT = 200;
+
 export class NemetonDB extends Dexie {
   festival!: EntityTable<FestivalRow, 'key'>;
   stages!: EntityTable<Stage, 'id'>;
   sessions!: EntityTable<Session, 'id'>;
   vendors!: EntityTable<Vendor, 'id'>;
   meta!: EntityTable<SyncMeta, 'key'>;
+  feed!: EntityTable<FeedItem, 'seq'>;
 
   constructor(name = 'nemeton') {
     super(name);
@@ -46,6 +65,7 @@ export class NemetonDB extends Dexie {
       vendors: 'id',
       meta: 'key',
     });
+    this.version(2).stores({ feed: 'seq' });
   }
 }
 
@@ -118,10 +138,17 @@ export class OutOfSyncError extends Error {}
 export async function applyChangesToDb(
   database: NemetonDB,
   batch: ChangesResponse,
-): Promise<number> {
+): Promise<FeedItem[]> {
   return database.transaction(
     'rw',
-    [database.festival, database.stages, database.sessions, database.vendors, database.meta],
+    [
+      database.festival,
+      database.stages,
+      database.sessions,
+      database.vendors,
+      database.meta,
+      database.feed,
+    ],
     async () => {
       const meta = await database.meta.get('sync');
       if (!meta || meta.dataVersion !== DATA_VERSION || meta.epoch !== batch.epoch) {
@@ -135,7 +162,21 @@ export async function applyChangesToDb(
         session: database.sessions,
         vendor: database.vendors,
       } as const;
+      const feed: FeedItem[] = [];
       for (const c of [...batch.changes].sort((a, b) => a.seq - b.seq)) {
+        if (c.entity === 'session') {
+          const before = await database.sessions.get(c.id);
+          const after = c.op === 'upsert' ? (parseEntity(c) as Session) : undefined;
+          feed.push({
+            seq: c.seq,
+            at: c.at,
+            sessionId: c.id,
+            op: c.op,
+            before,
+            after,
+            added: c.op === 'upsert' && !before,
+          });
+        }
         if (c.entity === 'festival') {
           if (c.op === 'upsert') {
             await database.festival.put({ ...(parseEntity(c) as Festival), key: FESTIVAL_ID });
@@ -149,7 +190,19 @@ export async function applyChangesToDb(
         }
       }
       await database.meta.update('sync', { seq: batch.to, syncedAt: Date.now() });
-      return batch.changes.length;
+      await addToFeed(database, feed);
+      return feed;
     },
   );
+}
+
+/** Adds feed items, keeping only the newest FEED_LIMIT. */
+export async function addToFeed(database: NemetonDB, items: FeedItem[]): Promise<void> {
+  if (items.length === 0) return;
+  await database.feed.bulkPut(items);
+  const excess = (await database.feed.count()) - FEED_LIMIT;
+  if (excess > 0) {
+    const oldest = await database.feed.orderBy('seq').limit(excess).primaryKeys();
+    await database.feed.bulkDelete(oldest);
+  }
 }

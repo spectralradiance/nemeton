@@ -29,8 +29,9 @@ The first server start creates `data/nemeton.db` from `data/seed/festival.json`.
 
 ## Organizer CLI
 
-Organizers change the live schedule from the command line. Attendees' apps pick changes up on
-their next refresh (on opening the app, on reconnecting, and every 5 minutes).
+Organizers change the live schedule from the command line. Apps that are open and online get
+each change within a couple of seconds over a live connection, with a toast and an entry in the
+Updates tab. Others catch up when they're next opened or back online.
 
 ```bash
 # Once, on the server: create an organizer. The token is shown only once.

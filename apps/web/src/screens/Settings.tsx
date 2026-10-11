@@ -56,7 +56,9 @@ function ScheduleData() {
             ? 'You are offline; showing the saved copy.'
             : sync.error
               ? `Couldn't check for changes (${sync.error}).`
-              : 'Changes from the organizers download automatically.'}
+              : sync.live
+                ? 'Connected for live updates: changes arrive within seconds.'
+                : 'Changes from the organizers download automatically.'}
       </p>
       <button
         className="button"

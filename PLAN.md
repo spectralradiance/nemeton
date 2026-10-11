@@ -298,11 +298,30 @@ Each phase ends with something demoable and its exit criteria.
   - E2E: an organizer change reaching an open app without reload, against its own API server and a throwaway database.
 - **Exit met:** a CLI `delay` appeared in an open app on the next refresh trigger, fetched as a delta, with the same DOM node (no remount or flicker). Verified by hand and in e2e.
 
-### Phase 4: Real-time SSE (≈4 days)
+### Phase 4: Real-time SSE ✅ done 2026-10-11
 
-- `/events` stream, heartbeat, `Last-Event-ID` replay, gap detection, visibility-based connect/disconnect.
-- Change toasts and Changes feed.
-- **Exit:** an admin edit appears on connected clients in under 2s. Killing and restoring the network resumes without missed changes.
+- **`GET /api/events`** (Hono `streamSSE`):
+  - On connect it replays everything after `Last-Event-ID` (automatic reconnects) or `?since` (first connect), then pushes each published batch. The event id is the batch's last seq.
+  - Live batches arriving during the replay are buffered, so ordering holds.
+  - A wrong epoch, or a client ahead of the server, gets a `reset` event.
+  - A heartbeat comment every 25 s. It unsubscribes when the client goes away.
+  - Fan-out is an in-process `ChangeHub`, enough for one server; Postgres `LISTEN/NOTIFY` or Redis would sit behind it to scale out.
+- **Client:**
+  - The stream is open only while the app is visible and online. It's closed in the background to save battery, and catch-up covers the gap on return.
+  - Pushed batches go through the same gap-checked apply as fetched ones. Duplicates are skipped, a gap triggers a catch-up fetch, and `reset` triggers a full download.
+  - The 5-minute poll stays as a fallback for a silently broken stream.
+- **Updates feed:**
+  - A new IndexedDB `feed` table (Dexie v2) records each session change with its before and after, written in the same transaction as the change.
+  - A fresh install also downloads the last 50 changes, so the feed isn't empty.
+  - The **Updates** tab shows plain-language entries ("Moved · Now Fri 3:45 PM · Fireside · Was … Stage 1") with an unread badge.
+- **Change toasts** say what changed with a "View" link. Changes arriving in quick succession add to the toast. Phase 5 narrows toasts to the attendee's itinerary; the feed keeps everything.
+- Settings shows when live updates are connected.
+- **Tests:** 88 unit and 12 e2e, the e2e stable across 3 runs.
+  - Server SSE: replay then live, `Last-Event-ID`, reset, heartbeat, unsubscribe.
+  - Client: duplicate, gap and epoch handling, feed before/after, announcements.
+  - Feed wording.
+  - E2E: push under 2 s with no other trigger; changes made while offline arrive on reconnect; toast, badge and feed.
+- **Exit met:** pushes arrive well under 2 s (the whole e2e test, publish included, takes about 0.85 s), and changes published while offline arrive on reconnect.
 
 ### Phase 5: Itinerary + outbox + Background Sync (≈1.5 weeks)
 

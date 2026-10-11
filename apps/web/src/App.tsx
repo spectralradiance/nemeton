@@ -8,6 +8,7 @@ import { NotFound } from './screens/NotFound';
 import { Schedule } from './screens/Schedule';
 import { SessionDetail } from './screens/SessionDetail';
 import { Settings } from './screens/Settings';
+import { Updates } from './screens/Updates';
 import { Vendors } from './screens/Vendors';
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
               <Route path="/schedule/:date?" component={Schedule} />
               <Route path="/lineup" component={Lineup} />
               <Route path="/session/:id" component={SessionDetail} />
+              <Route path="/updates" component={Updates} />
               <Route path="/vendors" component={Vendors} />
               <Route path="/settings" component={Settings} />
               <Route>

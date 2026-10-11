@@ -4,6 +4,10 @@ import { useSchedule } from '../data/schedule';
 import { applyClockParam, resetClock, useClockOffset, useNow } from '../lib/clock';
 import { formatDateTime } from '../lib/format';
 import { useSyncStatus } from '../data/sync';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../data/db';
+import { useFeedSeen } from '../lib/feed';
+import { ChangeToast } from './ChangeToast';
 import { festivalDayAt } from '@nemeton/shared';
 
 const NAV = [
@@ -13,6 +17,7 @@ const NAV = [
     match: (p: string) => p === '/' || p.startsWith('/schedule'),
   },
   { href: '/lineup', label: 'Lineup', match: (p: string) => p.startsWith('/lineup') },
+  { href: '/updates', label: 'Updates', match: (p: string) => p.startsWith('/updates') },
   { href: '/vendors', label: 'Vendors', match: (p: string) => p.startsWith('/vendors') },
 ];
 
@@ -56,6 +61,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 aria-current={item.match(location) ? 'page' : undefined}
               >
                 {item.label}
+                {item.href === '/updates' && <UnreadBadge />}
               </Link>
             ))}
           </nav>
@@ -76,6 +82,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <ClockBanner />
+      <ChangeToast />
       <main id="main" className="main">
         {children}
       </main>
@@ -110,5 +117,17 @@ function ClockBanner() {
         Use real time
       </button>
     </div>
+  );
+}
+
+/** Count of official changes not yet seen on the Updates screen. */
+function UnreadBadge() {
+  const [seen] = useFeedSeen();
+  const unread = useLiveQuery(() => db.feed.where('seq').above(seen).count(), [seen], 0);
+  if (!unread) return null;
+  return (
+    <span className="badge" aria-label={`, ${unread} new`}>
+      {unread > 9 ? '9+' : unread}
+    </span>
   );
 }
