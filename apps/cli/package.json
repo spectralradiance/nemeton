@@ -1,0 +1,13 @@
+{
+  "name": "@nemeton/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@nemeton/server": "*",
+    "@nemeton/shared": "*"
+  }
+}

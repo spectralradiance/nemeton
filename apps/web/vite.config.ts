@@ -2,6 +2,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Where /api is proxied in dev and preview. E2E tests point it at their own server.
+const api = process.env.API_URL ?? 'http://localhost:8787';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -39,11 +42,11 @@ export default defineConfig({
     port: Number(process.env.PORT ?? 5317),
     // When a launcher assigns a port, fail instead of silently moving to another one.
     strictPort: Boolean(process.env.PORT),
-    proxy: { '/api': 'http://localhost:8787' },
+    proxy: { '/api': api },
   },
   preview: {
     port: Number(process.env.PORT ?? 5318),
     strictPort: Boolean(process.env.PORT),
-    proxy: { '/api': 'http://localhost:8787' },
+    proxy: { '/api': api },
   },
 });

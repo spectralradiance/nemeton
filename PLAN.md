@@ -209,9 +209,12 @@ On every app start:
 ### 5.9 Server and admin
 
 - Public endpoints: `GET /schedule/snapshot`, `GET /schedule/changes?since`, `GET /events` (SSE), `POST /itinerary/ops`. The `GET /itinerary?since` pull endpoint arrives in v2.
-- Admin endpoints (organizers only): `POST /admin/changes`, `POST /admin/import`, `GET /admin/stats`. Each organizer gets their own API token, so the change log can record who made each change. Tokens can be revoked individually.
+- Admin endpoints (organizers only): `POST /admin/changes`, `GET /admin/log`, `GET /admin/whoami`, plus `GET /admin/stats` in Phase 5. Each organizer gets their own API token, so the change log can record who made each change. Tokens can be revoked individually.
+  - There's no separate import endpoint. The CLI diffs the file against the live schedule and posts the result as ordinary changes.
+  - `POST /admin/changes` validates the whole resulting schedule and applies the batch all-or-nothing.
+  - With `baseSeq`, it refuses with 409 if anyone published in the meantime.
 - **v1 organizer tooling is a CLI** (`npm run admin …`) wrapping the admin API:
-  - `import schedule.json`: validates and diffs a full schedule against the current one, prints the diff, and publishes it as change-log entries after confirmation.
+  - `import schedule.csv`: diffs a full schedule against the current one, prints the diff, and publishes it as change-log entries after confirmation. It warns if publishing would undo on-the-day changes.
   - `delay <sessionId> 20m`, `move <sessionId> --stage main --at 21:30`, `cancel <sessionId> --note "…"`: quick fixes for the day of the festival.
   - `log`: shows recent changes and who made them.
   - Every command supports `--dry-run`. Mistakes are fixed by publishing a correcting change, never by rewriting the log.
@@ -266,12 +269,34 @@ Each phase ends with something demoable and its exit criteria.
 - `npm run preview` builds and serves the production app on port 5318 with the API. The service worker is off in dev on purpose.
 - **Exit:** the offline criteria are met and covered by e2e. Installing on a real Android phone, iPhone and desktop Chrome **still needs a manual check on devices**. The manifest and icons pass the automated installability check.
 
-### Phase 3: Deltas and SWR (≈1 week)
+### Phase 3: Deltas and SWR ✅ done 2026-10-11
 
-- `ChangeLog` + `seq`, `/changes?since`, `410` → snapshot fallback.
-- Background revalidation on start, focus, online and interval. Atomic apply.
-- Admin API with per-organizer tokens, and the organizer CLI (`import` with diff, `delay`, `move`, `cancel`, `log`, `--dry-run`).
-- **Exit:** a change made with the CLI shows up on a client after its next refresh trigger, without a reload and without UI flicker.
+- **Server:** SQLite through Node's built-in `node:sqlite`, so there are no native dependencies. Postgres can come later if hosting needs it. It has `entities`, an append-only `changes` log, `organizers` (SHA-256 token hashes only) and `meta`.
+  - An empty database seeds from `data/seed/festival.json` at seq 0.
+  - Each database has a random **epoch**. A client holding seq numbers from another epoch (e.g. after `db:reset`) gets a 410 and starts over.
+- **Shared contract** (`packages/shared/src/changes.ts`):
+  - Schemas for changes and responses.
+  - `applyChanges`: pure. It validates the whole resulting schedule, including references.
+  - `diffSnapshots`: orders changes so references stay valid; new stages before the sessions moved onto them, sessions deleted before their stage.
+  - The server, the client and the CLI all use these.
+- **API:**
+  - `GET /api/schedule/changes?since&epoch` returns 200 with changes, or 410 to start over.
+  - The snapshot carries `epoch`, with ETag `"epoch:seq"`.
+  - Admin endpoints are as in §5.9.
+- **Client:**
+  - With nothing stored, or after a 410, it downloads the snapshot. Otherwise it fetches changes since the stored seq and applies them in one IndexedDB transaction.
+  - A batch that doesn't start at the stored seq triggers a full download. An unreadable change rolls back the whole batch.
+  - Screens update in place through `useLiveQuery`. `DATA_VERSION` 2 makes older installs re-download once.
+- **CLI** (`apps/cli`, `npm run admin`): `delay`, `move`, `cancel`, `restore`, `import`, `log`, `whoami`, `organizer add/list/revoke` and `reset-db`.
+  - `--dry-run` and `--yes` on every change.
+  - Readable diffs ("start Sun 11:00 PM → Mon 12:30 AM, stage Stage 1 → Stage 2").
+  - Accent-insensitive session lookup, and late-night `--at` handling.
+- **Tests:** 72 unit and 8 e2e.
+  - Client sync runs against the real server app with in-memory SQLite: deltas, epoch reset, gaps, rollback.
+  - Server: auth, 409, all-or-nothing batches, persistence.
+  - CLI time arithmetic.
+  - E2E: an organizer change reaching an open app without reload, against its own API server and a throwaway database.
+- **Exit met:** a CLI `delay` appeared in an open app on the next refresh trigger, fetched as a delta, with the same DOM node (no remount or flicker). Verified by hand and in e2e.
 
 ### Phase 4: Real-time SSE (≈4 days)
 

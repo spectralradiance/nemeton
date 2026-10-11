@@ -18,7 +18,9 @@
     "import:csv": "tsx scripts/import-csv.ts data/raw/cascadian-midsummer-2026.csv --out data/seed/festival.json",
     "start:server": "npm run start -w @nemeton/server",
     "preview": "npm run build && concurrently -k -n server,web -c green,blue \"npm:start:server\" \"npm run preview -w @nemeton/web\"",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "admin": "tsx apps/cli/src/main.ts",
+    "db:reset": "tsx apps/cli/src/main.ts reset-db"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

@@ -1,9 +1,15 @@
 import { useSyncExternalStore } from 'react';
-import { Snapshot } from '@nemeton/shared';
-import { DATA_VERSION, writeSnapshot, type NemetonDB } from './db';
+import { ChangesResponse, SnapshotResponse } from '@nemeton/shared';
+import {
+  DATA_VERSION,
+  OutOfSyncError,
+  applyChangesToDb,
+  writeSnapshot,
+  type NemetonDB,
+} from './db';
 
 // Stale-while-revalidate: screens render whatever is in IndexedDB straight away, and this module
-// refreshes it in the background. Phase 3 swaps the full download for deltas (/changes?since=seq).
+// refreshes it in the background by fetching only what changed since the stored seq.
 
 export type SyncResult = 'updated' | 'unchanged';
 
@@ -37,29 +43,41 @@ export function useSyncStatus(): SyncStatus {
 }
 
 /**
- * Fetches the snapshot if it changed since the stored ETag, and stores it.
- * Server wins for schedule data, but a response older than what's stored (lower seq) is ignored.
+ * Brings the stored schedule up to date. Normally fetches only the changes since the stored seq;
+ * downloads the whole schedule when there's nothing stored, the server says the gap can't be
+ * bridged (410), or a batch doesn't line up with what's stored.
  */
-export async function syncSnapshot(
+export async function syncSchedule(
   database: NemetonDB,
   fetchImpl: typeof fetch = fetch,
 ): Promise<SyncResult> {
   const meta = await database.meta.get('sync');
-  const current = meta?.dataVersion === DATA_VERSION ? meta : undefined;
-  const res = await fetchImpl('/api/schedule/snapshot', {
-    headers: current?.etag ? { 'If-None-Match': current.etag } : {},
-    cache: 'no-store',
-  });
+  if (!meta || meta.dataVersion !== DATA_VERSION) return downloadSnapshot(database, fetchImpl);
 
-  if (res.status === 304 && current) {
+  const params = new URLSearchParams({ since: String(meta.seq), epoch: meta.epoch });
+  const res = await fetchImpl(`/api/schedule/changes?${params}`, { cache: 'no-store' });
+  if (res.status === 410) return downloadSnapshot(database, fetchImpl);
+  if (!res.ok) throw new Error(`The server answered ${res.status}`);
+
+  const batch = ChangesResponse.parse(await res.json());
+  if (batch.changes.length === 0) {
     await database.meta.update('sync', { syncedAt: Date.now() });
     return 'unchanged';
   }
-  if (!res.ok) throw new Error(`The server answered ${res.status}`);
+  try {
+    await applyChangesToDb(database, batch);
+  } catch (err) {
+    if (err instanceof OutOfSyncError) return downloadSnapshot(database, fetchImpl);
+    throw err;
+  }
+  return 'updated';
+}
 
-  const snapshot = Snapshot.parse(await res.json());
-  if (current && snapshot.seq < current.seq) return 'unchanged';
-  await writeSnapshot(database, snapshot, res.headers.get('etag'));
+async function downloadSnapshot(database: NemetonDB, fetchImpl: typeof fetch): Promise<SyncResult> {
+  const res = await fetchImpl('/api/schedule/snapshot', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`The server answered ${res.status}`);
+  const { epoch, ...snapshot } = SnapshotResponse.parse(await res.json());
+  await writeSnapshot(database, snapshot, epoch);
   return 'updated';
 }
 
@@ -70,7 +88,7 @@ export function requestSync(database: NemetonDB): Promise<SyncResult> {
   inFlight ??= (async () => {
     setStatus({ syncing: true });
     try {
-      const result = await syncSnapshot(database);
+      const result = await syncSchedule(database);
       setStatus({ error: null });
       return result;
     } catch (err) {

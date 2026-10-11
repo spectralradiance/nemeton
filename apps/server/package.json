@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --include ../../data/seed/festival.json src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc -p ."
   },
@@ -12,5 +12,10 @@
     "@hono/node-server": "^2.1.4",
     "@nemeton/shared": "*",
     "hono": "^4.13.13"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./store": "./src/store.ts",
+    "./app": "./src/app.ts"
   }
 }

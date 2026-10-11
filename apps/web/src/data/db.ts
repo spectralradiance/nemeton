@@ -1,19 +1,29 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Festival, Session, Snapshot, Stage, Vendor } from '@nemeton/shared';
+import {
+  FESTIVAL_ID,
+  parseEntity,
+  type ChangesResponse,
+  type Festival,
+  type Session,
+  type Snapshot,
+  type Stage,
+  type Vendor,
+} from '@nemeton/shared';
 
 /**
  * Bump when the shape of stored records changes. Older data is then ignored and re-downloaded,
  * which is always safe for server-owned schedule data. (Itinerary tables, added in Phase 5, will
  * need real Dexie migrations instead.)
  */
-export const DATA_VERSION = 1;
+export const DATA_VERSION = 2;
 
 export interface SyncMeta {
   key: 'sync';
   dataVersion: number;
-  /** Change-log position of the stored schedule. Never moves backwards. */
+  /** Which server database the data came from; seq numbers only mean something within one. */
+  epoch: string;
+  /** Change-log position of the stored schedule. Never moves backwards within an epoch. */
   seq: number;
-  etag: string | null;
   /** When the server last confirmed this data was current. */
   syncedAt: number;
 }
@@ -71,7 +81,7 @@ export async function readSnapshot(database: NemetonDB): Promise<Snapshot | null
 export async function writeSnapshot(
   database: NemetonDB,
   snapshot: Snapshot,
-  etag: string | null,
+  epoch: string,
 ): Promise<void> {
   await database.transaction(
     'rw',
@@ -90,11 +100,56 @@ export async function writeSnapshot(
         database.meta.put({
           key: 'sync',
           dataVersion: DATA_VERSION,
+          epoch,
           seq: snapshot.seq,
-          etag,
           syncedAt: Date.now(),
         }),
       ]);
+    },
+  );
+}
+
+export class OutOfSyncError extends Error {}
+
+/**
+ * Applies a batch of changes in one transaction, in seq order. Refuses (OutOfSyncError) unless the
+ * batch starts exactly where the stored data is, so a gap or a stale response can't corrupt it.
+ */
+export async function applyChangesToDb(
+  database: NemetonDB,
+  batch: ChangesResponse,
+): Promise<number> {
+  return database.transaction(
+    'rw',
+    [database.festival, database.stages, database.sessions, database.vendors, database.meta],
+    async () => {
+      const meta = await database.meta.get('sync');
+      if (!meta || meta.dataVersion !== DATA_VERSION || meta.epoch !== batch.epoch) {
+        throw new OutOfSyncError('Stored schedule is from a different server database');
+      }
+      if (meta.seq !== batch.from) {
+        throw new OutOfSyncError(`Expected changes after ${meta.seq}, got after ${batch.from}`);
+      }
+      const tables = {
+        stage: database.stages,
+        session: database.sessions,
+        vendor: database.vendors,
+      } as const;
+      for (const c of [...batch.changes].sort((a, b) => a.seq - b.seq)) {
+        if (c.entity === 'festival') {
+          if (c.op === 'upsert') {
+            await database.festival.put({ ...(parseEntity(c) as Festival), key: FESTIVAL_ID });
+          }
+        } else if (c.op === 'delete') {
+          await tables[c.entity].delete(c.id);
+        } else {
+          // Validated with the same schema the server used; throws (and rolls back) if this app
+          // version can't understand the data.
+          await (tables[c.entity] as typeof database.sessions).put(parseEntity(c) as Session);
+        }
+      }
+      await database.meta.update('sync', { seq: batch.to, syncedAt: Date.now() });
+      return batch.changes.length;
     },
   );
 }

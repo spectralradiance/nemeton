@@ -79,39 +79,59 @@ export const Vendor = z.object({
 });
 export type Vendor = z.infer<typeof Vendor>;
 
-export const Snapshot = z
-  .object({
-    /** Change-log sequence number this snapshot reflects. */
-    seq: z.number().int().min(0),
-    festival: Festival,
-    stages: z.array(Stage),
-    sessions: z.array(Session),
-    vendors: z.array(Vendor),
-  })
-  .superRefine((snap, ctx) => {
-    const stageIds = new Set(snap.stages.map((s) => s.id));
-    const days = new Set(snap.festival.days.map((d) => d.date));
+const SnapshotFields = z.object({
+  /** Change-log sequence number this snapshot reflects. */
+  seq: z.number().int().min(0),
+  festival: Festival,
+  stages: z.array(Stage),
+  sessions: z.array(Session),
+  vendors: z.array(Vendor),
+});
+
+/** Cross-record checks: unique ids, and sessions pointing at real stages and festival days. */
+function checkReferences(snap: z.infer<typeof SnapshotFields>, ctx: z.RefinementCtx) {
+  const stageIds = new Set(snap.stages.map((s) => s.id));
+  const days = new Set(snap.festival.days.map((d) => d.date));
+  for (const [list, name] of [
+    [snap.stages, 'stages'],
+    [snap.sessions, 'sessions'],
+    [snap.vendors, 'vendors'],
+  ] as const) {
     const seen = new Set<string>();
-    snap.sessions.forEach((s, i) => {
-      if (seen.has(s.id))
+    list.forEach((item, i) => {
+      if (seen.has(item.id))
         ctx.addIssue({
           code: 'custom',
-          path: ['sessions', i, 'id'],
-          message: `duplicate session id "${s.id}"`,
+          path: [name, i, 'id'],
+          message: `duplicate id "${item.id}"`,
         });
-      seen.add(s.id);
-      if (!stageIds.has(s.stageId))
-        ctx.addIssue({
-          code: 'custom',
-          path: ['sessions', i, 'stageId'],
-          message: `unknown stage "${s.stageId}"`,
-        });
-      if (!days.has(s.day))
-        ctx.addIssue({
-          code: 'custom',
-          path: ['sessions', i, 'day'],
-          message: `unknown festival day "${s.day}"`,
-        });
+      seen.add(item.id);
     });
+  }
+  snap.sessions.forEach((s, i) => {
+    if (!stageIds.has(s.stageId))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['sessions', i, 'stageId'],
+        message: `unknown stage "${s.stageId}"`,
+      });
+    if (!days.has(s.day))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['sessions', i, 'day'],
+        message: `unknown festival day "${s.day}"`,
+      });
   });
+}
+
+export const Snapshot = SnapshotFields.superRefine(checkReferences);
 export type Snapshot = z.infer<typeof Snapshot>;
+
+/**
+ * What the server sends: a snapshot plus the epoch of the database it came from. A new epoch
+ * (e.g. the server's data was reset) means local seq numbers mean nothing and must be discarded.
+ */
+export const SnapshotResponse = SnapshotFields.extend({ epoch: z.string() }).superRefine(
+  checkReferences,
+);
+export type SnapshotResponse = z.infer<typeof SnapshotResponse>;
