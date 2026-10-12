@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { diffSnapshots, type ChangeInput, type Session, type Snapshot } from '@nemeton/shared';
 import { CsvImportError, importFestivalCsv } from '@nemeton/shared/import';
 import { DEFAULT_DB, openStore } from '@nemeton/server';
-import { ApiError, apiConfig, fetchLog, fetchSnapshot, publish, whoami } from './api';
+import { ApiError, apiConfig, fetchLog, fetchSnapshot, fetchStats, publish, whoami } from './api';
 import { describeChanges } from './describe';
 import { UsageError, delaySession, findSession, moveSession, parseDuration } from './edits';
 
@@ -21,6 +21,7 @@ Schedule changes (talk to the server; need NEMETON_TOKEN):
   import <file.csv> [--start DATE] [--tz ZONE] [--name NAME]
                                     Publish the differences between a spreadsheet and the live schedule
   log [--limit N]                   Recent changes and who made them
+  stats [--limit N]                 Sessions by how many attendees saved them (anonymous counts)
   whoami                            Check your token
 
   Options for changes: --note "…" (shown to attendees), --dry-run, --yes (skip the confirmation)
@@ -73,6 +74,8 @@ async function main() {
       return importCsv(args);
     case 'log':
       return showLog();
+    case 'stats':
+      return showStats();
     case 'whoami': {
       const me = await whoami(api);
       return console.log(`Signed in as ${me.name} (${me.id}) on ${api.base}`);
@@ -186,6 +189,17 @@ async function showLog() {
       `#${String(c.seq).padEnd(4)} ${when.format(new Date(c.at))}  ${c.author.padEnd(16)} ${what} ${c.entity} ${c.id}${name ? ` "${name}"` : ''}${note ? ` (${note})` : ''}`,
     );
   }
+}
+
+async function showStats() {
+  const limit = Number(opts.limit ?? 20);
+  const stats = await fetchStats(api);
+  if (stats.length === 0) return console.log('Nobody has saved any sessions yet.');
+  const width = String(stats[0]!.count).length;
+  for (const s of stats.slice(0, limit)) {
+    console.log(`${String(s.count).padStart(width)}  ${s.title ?? `(removed) ${s.sessionId}`}`);
+  }
+  if (stats.length > limit) console.log(`… and ${stats.length - limit} more (--limit N)`);
 }
 
 // ---------- local server administration ----------

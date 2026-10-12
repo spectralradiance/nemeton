@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   ChangeInput,
@@ -7,7 +7,9 @@ import {
   parseEntity,
   slugify,
   type Change,
+  type DeviceRegistration,
   type EntityKind,
+  type ItineraryOp,
   type Snapshot,
 } from '@nemeton/shared';
 
@@ -52,7 +54,27 @@ const SCHEMA = `
     id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL, revoked_at TEXT
   );
+  -- Attendee itineraries: one row per (user, session), last writer (by HLC) wins.
+  CREATE TABLE IF NOT EXISTS itinerary (
+    user_id TEXT NOT NULL, session_id TEXT NOT NULL, state TEXT NOT NULL,
+    hlc TEXT NOT NULL, device_id TEXT NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, session_id)
+  );
+  -- Op ids already applied, so a retried request changes nothing.
+  CREATE TABLE IF NOT EXISTS applied_ops (
+    op_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, applied_at TEXT NOT NULL
+  );
 `;
+
+export interface Device {
+  userId: string;
+  deviceId: string;
+}
+
+export interface SessionPopularity {
+  sessionId: string;
+  count: number;
+}
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -224,6 +246,114 @@ export class Store {
       }
       return { from, to: this.seq, changes: written };
     });
+  }
+
+  // ---------- attendee devices and itineraries ----------
+
+  /** Signing key for device tokens. Created on first use; resetting the database invalidates them. */
+  private deviceSecret(): Buffer {
+    const existing = this.db.prepare(`SELECT value FROM meta WHERE key = 'device_secret'`).get() as
+      { value: string } | undefined;
+    if (existing) return Buffer.from(existing.value, 'base64url');
+    const secret = randomBytes(32);
+    this.setMeta('device_secret', secret.toString('base64url'));
+    return secret;
+  }
+
+  private sign(payload: string): string {
+    return createHmac('sha256', this.deviceSecret()).update(payload).digest('base64url');
+  }
+
+  /**
+   * An anonymous identity for a new install. No account or personal data: the token just proves
+   * later requests come from the same itinerary. The server picks the user id so nobody can claim
+   * someone else's; the device id is the client's own (it already stamps its clock with it).
+   */
+  registerDevice(deviceId: string): DeviceRegistration {
+    if (!/^[\w-]{8,64}$/.test(deviceId)) throw new StoreError('Invalid device id', 422);
+    const userId = randomUUID();
+    const payload = Buffer.from(JSON.stringify({ u: userId, d: deviceId })).toString('base64url');
+    return { userId, deviceId, token: `dev_${payload}.${this.sign(payload)}` };
+  }
+
+  /** The device a token was issued to, if the signature checks out. */
+  verifyDevice(token: string): Device | null {
+    const m = /^dev_([\w-]+)\.([\w-]+)$/.exec(token);
+    if (!m) return null;
+    const expected = Buffer.from(this.sign(m[1]!));
+    const actual = Buffer.from(m[2]!);
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+    try {
+      const { u, d } = JSON.parse(Buffer.from(m[1]!, 'base64url').toString()) as {
+        u: string;
+        d: string;
+      };
+      return { userId: u, deviceId: d };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Applies itinerary ops idempotently. An op id seen before is skipped. Otherwise the op wins
+   * if its HLC is newer than what's stored, so a late-arriving older op can't undo a newer one.
+   */
+  applyItineraryOps(device: Device, ops: ItineraryOp[]): { applied: number; duplicates: number } {
+    return this.transaction(() => {
+      const seen = this.db.prepare('SELECT 1 FROM applied_ops WHERE op_id = ?');
+      const record = this.db.prepare(
+        'INSERT INTO applied_ops (op_id, user_id, applied_at) VALUES (?, ?, ?)',
+      );
+      const current = this.db.prepare(
+        'SELECT hlc FROM itinerary WHERE user_id = ? AND session_id = ?',
+      );
+      const upsert = this.db.prepare(`
+        INSERT INTO itinerary (user_id, session_id, state, hlc, device_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, session_id) DO UPDATE SET
+          state = excluded.state, hlc = excluded.hlc,
+          device_id = excluded.device_id, updated_at = excluded.updated_at
+      `);
+      const now = new Date().toISOString();
+      let applied = 0;
+      let duplicates = 0;
+      for (const op of [...ops].sort((a, b) => (a.hlc < b.hlc ? -1 : a.hlc > b.hlc ? 1 : 0))) {
+        if (seen.get(op.opId)) {
+          duplicates++;
+          continue;
+        }
+        record.run(op.opId, device.userId, now);
+        const stored = current.get(device.userId, op.sessionId) as { hlc: string } | undefined;
+        if (!stored || op.hlc > stored.hlc) {
+          upsert.run(device.userId, op.sessionId, op.state, op.hlc, device.deviceId, now);
+        }
+        applied++;
+      }
+      return { applied, duplicates };
+    });
+  }
+
+  /** The sessions a user has in their itinerary (for tests and, in v2, other devices). */
+  itinerary(userId: string): string[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT session_id FROM itinerary WHERE user_id = ? AND state = 'added' ORDER BY session_id`,
+        )
+        .all(userId) as { session_id: string }[]
+    ).map((r) => r.session_id);
+  }
+
+  /** How many attendees have each session in their itinerary. Anonymous counts only. */
+  popularity(): SessionPopularity[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT session_id, COUNT(*) AS count FROM itinerary WHERE state = 'added'
+           GROUP BY session_id ORDER BY count DESC, session_id`,
+        )
+        .all() as { session_id: string; count: number }[]
+    ).map((r) => ({ sessionId: r.session_id, count: Number(r.count) }));
   }
 
   // ---------- organizers ----------

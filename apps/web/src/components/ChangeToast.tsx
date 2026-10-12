@@ -1,29 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
 import type { FeedItem } from '../data/db';
 import { useSchedule } from '../data/schedule';
 import { onScheduleChanged } from '../data/sync';
 import { describeFeedItem } from '../lib/feed';
+import { usePlan } from '../data/plan';
 
 const SHOW_MS = 10_000;
 
 /**
- * Pops up when organizers change the schedule while the app is open. (Phase 5 narrows this to
- * sessions in the attendee's itinerary; everything stays in the Updates feed.)
+ * Pops up when organizers change a session in the attendee's plan while the app is open.
+ * Every change, saved or not, is listed in the Updates tab.
  */
 export function ChangeToast() {
   const { snapshot, stageById } = useSchedule();
   const [items, setItems] = useState<FeedItem[]>([]);
+  const plan = usePlan();
+  const planRef = useRef(plan);
+  planRef.current = plan;
 
   // Changes arriving while the toast is up add to it rather than replacing it.
   useEffect(
     () =>
-      onScheduleChanged((latest) =>
+      onScheduleChanged((latest) => {
+        // Only interrupt for sessions the attendee saved; the Updates tab has everything.
+        const mine = latest.filter((i) => planRef.current.has(i.sessionId));
+        if (mine.length === 0) return;
         setItems((shown) => {
           const seqs = new Set(shown.map((i) => i.seq));
-          return [...shown, ...latest.filter((i) => !seqs.has(i.seq))];
-        }),
-      ),
+          return [...shown, ...mine.filter((i) => !seqs.has(i.seq))];
+        });
+      }),
     [],
   );
   useEffect(() => {
@@ -39,7 +46,7 @@ export function ChangeToast() {
     return (
       <div className="change-toast" role="status">
         <span className="change-toast-text">
-          <strong>{items.length} schedule changes</strong>
+          <strong>{items.length} changes to your plan</strong>
         </span>
         <Link href="/updates" className="change-toast-action" onClick={close}>
           See updates

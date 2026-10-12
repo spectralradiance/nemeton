@@ -9,6 +9,7 @@ import {
   type FeedItem,
   type NemetonDB,
 } from './db';
+import { requestFlush } from './plan';
 
 // Keeps the IndexedDB copy of the schedule current. Screens render from IndexedDB and never wait
 // on the network. Three ways changes arrive, all applied the same gap-checked way:
@@ -239,10 +240,13 @@ const POLL_MS = 5 * 60_000;
 /** Starts live updates plus catch-up on start, reconnect and return to the app, and polling. */
 export function startBackgroundSync(database: NemetonDB): () => void {
   const live = startLiveStream(database);
-  const run = () =>
+  const run = () => {
     void requestSync(database)
       .catch(() => {})
       .then(live.connect);
+    // Same moments are good for sending the attendee's queued plan edits.
+    void requestFlush();
+  };
 
   const onVisibility = () => {
     if (document.visibilityState === 'visible') run();

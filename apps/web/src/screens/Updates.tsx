@@ -5,6 +5,7 @@ import { db, type FeedItem } from '../data/db';
 import { useSchedule } from '../data/schedule';
 import { useSyncStatus } from '../data/sync';
 import { describeFeedItem, useFeedSeen } from '../lib/feed';
+import { usePlan } from '../data/plan';
 import { formatDateTime } from '../lib/format';
 
 /** Official schedule changes, newest first. */
@@ -44,10 +45,14 @@ function FeedRow({ item, unread }: { item: FeedItem; unread: boolean }) {
   const { snapshot, stageById, sessionById } = useSchedule();
   const d = describeFeedItem(item, snapshot.festival, (id) => stageById.get(id)?.name ?? id);
   const exists = sessionById.has(item.sessionId);
+  const inPlan = usePlan().has(item.sessionId);
   return (
     <li className="feed-item" data-unread={unread || undefined}>
       <div className="feed-head">
-        <span className={`feed-label tone-${d.tone}`}>{d.label}</span>
+        <span>
+          <span className={`feed-label tone-${d.tone}`}>{d.label}</span>
+          {inPlan && <span className="tag">In your plan</span>}
+        </span>
         <time dateTime={item.at} className="muted">
           {formatDateTime(snapshot.festival, item.at)}
         </time>

@@ -6,6 +6,7 @@ import { KIND_LABEL, formatDay, formatTimeRange, linkLabel, paragraphs } from '.
 import { SessionRow } from '../components/SessionRow';
 import { StageName } from '../components/StageName';
 import { StatusBadge } from '../components/StatusBadge';
+import { SaveButton } from '../components/SaveButton';
 import { NotFound } from './NotFound';
 
 const ABOUT_HEADING: Record<Session['kind'], (s: Session) => string> = {
@@ -47,6 +48,7 @@ export function SessionDetail() {
           </p>
           <h1 className="detail-title">{s.title}</h1>
           {s.subtitle && <p className="detail-subtitle">{s.subtitle}</p>}
+          <SaveButton session={s} />
 
           {s.status !== 'scheduled' && (
             <p className="status-banner">

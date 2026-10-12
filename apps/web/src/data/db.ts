@@ -4,6 +4,8 @@ import {
   parseEntity,
   type ChangesResponse,
   type Festival,
+  type ItineraryOp,
+  type ItineraryState,
   type Session,
   type Snapshot,
   type Stage,
@@ -45,6 +47,32 @@ export interface FeedItem {
   added?: boolean;
 }
 
+/** A session in (or removed from) the attendee's plan. Owned by this device: "client wins". */
+export interface ItineraryItem {
+  sessionId: string;
+  state: ItineraryState;
+  hlc: string;
+  updatedAt: number;
+  /** Title when saved, to name it if the organizers later remove the session. */
+  title?: string;
+}
+
+/** An itinerary edit not yet confirmed by the server. */
+export interface OutboxOp extends ItineraryOp {
+  createdAt: number;
+  attempts: number;
+}
+
+/** This install's identity: a local id for the clock, and the server's anonymous registration. */
+export interface DeviceRow {
+  key: 'device';
+  deviceId: string;
+  /** Last HLC issued here, so the clock never goes backwards across reloads. */
+  hlc: string | null;
+  userId?: string;
+  token?: string;
+}
+
 /** How many feed items to keep on the device. */
 export const FEED_LIMIT = 200;
 
@@ -55,6 +83,9 @@ export class NemetonDB extends Dexie {
   vendors!: EntityTable<Vendor, 'id'>;
   meta!: EntityTable<SyncMeta, 'key'>;
   feed!: EntityTable<FeedItem, 'seq'>;
+  itinerary!: EntityTable<ItineraryItem, 'sessionId'>;
+  outbox!: EntityTable<OutboxOp, 'opId'>;
+  device!: EntityTable<DeviceRow, 'key'>;
 
   constructor(name = 'nemeton') {
     super(name);
@@ -66,6 +97,7 @@ export class NemetonDB extends Dexie {
       meta: 'key',
     });
     this.version(2).stores({ feed: 'seq' });
+    this.version(3).stores({ itinerary: 'sessionId, state', outbox: 'opId, createdAt', device: 'key' });
   }
 }
 

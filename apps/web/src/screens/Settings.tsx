@@ -201,9 +201,25 @@ function Storage() {
 
 function Reset() {
   async function reset() {
-    if (!window.confirm('Delete the saved schedule and photos from this device?')) return;
-    db.close();
-    await db.delete();
+    if (
+      !window.confirm('Delete the saved schedule and photos from this device? Your plan is kept.')
+    )
+      return;
+    // Server-owned data only: it all downloads again. The plan and its unsent edits stay.
+    await db.transaction(
+      'rw',
+      [db.festival, db.stages, db.sessions, db.vendors, db.meta, db.feed],
+      async () => {
+        await Promise.all([
+          db.festival.clear(),
+          db.stages.clear(),
+          db.sessions.clear(),
+          db.vendors.clear(),
+          db.meta.clear(),
+          db.feed.clear(),
+        ]);
+      },
+    );
     if ('caches' in window) await caches.delete(PHOTO_CACHE);
     window.location.assign('/');
   }
@@ -211,6 +227,7 @@ function Reset() {
     <Card title="Reset">
       <p>
         Removes the downloaded schedule and photos. They download again next time you're online.
+        Your plan is kept.
       </p>
       <button className="button button-danger" onClick={() => void reset()}>
         Clear saved data

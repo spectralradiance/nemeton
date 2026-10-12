@@ -1127,3 +1127,123 @@ h2 {
   margin: 4px 0 0;
   font-size: 0.875rem;
 }
+
+/* ---------- Phase 5: my plan ---------- */
+
+.save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding: 9px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.save-button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.saved-marker {
+  display: inline-flex;
+  margin-right: 6px;
+  color: var(--accent);
+  vertical-align: -0.1em;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.icon-button:hover {
+  background: var(--surface-2);
+}
+
+.plan-count {
+  margin: 0;
+}
+.plan-status {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+}
+.plan-status[data-error] {
+  color: var(--danger);
+}
+.plan-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding-right: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.plan-item[data-clash] {
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--line));
+}
+.plan-item .session-row {
+  border-top: 0;
+}
+.plan-main {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 6px;
+}
+.plan-when,
+.plan-flag {
+  margin: -4px 14px 6px calc(5.25rem + 26px);
+  font-size: 0.85rem;
+}
+.plan-flag[data-clash],
+.plan-flag[data-status='delayed'],
+.plan-flag[data-status='moved'] {
+  color: var(--warn);
+}
+.plan-flag[data-status='cancelled'] {
+  color: var(--danger);
+}
+.plan-orphan {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+}
+.plan-item[data-orphan] {
+  border-style: dashed;
+}
+@media (max-width: 699px) {
+  .plan-when,
+  .plan-flag {
+    margin-left: 14px;
+  }
+  /* Five tabs: tighter labels so they fit a 360px phone. */
+  .nav-link {
+    font-size: 0.82rem;
+    padding: 0 2px;
+  }
+}
+/* Everything on My plan is saved; the remove button already shows the star. */
+.plan-item .saved-marker {
+  display: none;
+}

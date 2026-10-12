@@ -4,6 +4,7 @@ import { useSchedule } from '../../data/schedule';
 import { KIND_LABEL, formatTime, formatTimeRange } from '../../lib/format';
 import { stageStyle } from '../../components/StageName';
 import { StatusBadge } from '../../components/StatusBadge';
+import { SavedMarker } from '../../components/SaveButton';
 
 const PX_PER_MIN = 1.5;
 const HOUR = 3_600_000;
@@ -101,7 +102,10 @@ export function ScheduleGrid({
                         <span className="grid-block-time">
                           {formatTimeRange(festival, start, end.endsAt, end.estimated)}
                         </span>
-                        <span className="grid-block-title">{s.title}</span>
+                        <span className="grid-block-title">
+                          <SavedMarker sessionId={s.id} />
+                          {s.title}
+                        </span>
                         <span className="grid-block-kind">
                           {KIND_LABEL[s.kind]} <StatusBadge session={s} />
                         </span>

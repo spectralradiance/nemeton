@@ -27,6 +27,13 @@ The first server start creates `data/nemeton.db` from `data/seed/festival.json`.
 **Demo clock:** add `?now=2026-06-20T20:40` to any URL to pretend it's that festival-local time
 (`?now=off` resets it). This shows "On now", the now-line and dimmed past sets with past data.
 
+## Attendee plan
+
+Attendees save sessions to **My plan** with no account. The plan is stored on the device, works
+offline and syncs to the server in the background, through Background Sync on Chromium even after
+the app is closed. It flags clashes and organizer changes to saved sessions, and exports to a
+calendar (`.ics`). The server only learns anonymous counts, which organizers see with `stats`.
+
 ## Organizer CLI
 
 Organizers change the live schedule from the command line. Apps that are open and online get
@@ -45,6 +52,7 @@ npm run admin -- cancel "rewilding" --note "Cancelled due to high winds"
 npm run admin -- restore rewilding-the-selkie-sun
 npm run admin -- import data/raw/cascadian-midsummer-2026.csv
 npm run admin -- log
+npm run admin -- stats               # which sessions attendees saved most (anonymous counts)
 ```
 
 - Every change shows exactly what will change and asks before publishing. `--dry-run` only

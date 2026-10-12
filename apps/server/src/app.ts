@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import type { ChangesResponse, SnapshotResponse } from '@nemeton/shared';
+import { ItineraryOpsRequest, type ChangesResponse, type SnapshotResponse } from '@nemeton/shared';
 import { ChangeHub } from './hub';
 import { StoreError, type Organizer, type Store } from './store';
 
@@ -89,6 +89,25 @@ export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEA
     });
   });
 
+  // ---------- attendees: anonymous identity and itinerary ----------
+
+  app.post('/devices', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { deviceId?: unknown } | null;
+    if (typeof body?.deviceId !== 'string') return c.json({ error: 'Expected { deviceId }' }, 400);
+    return c.json(store.registerDevice(body.deviceId), 201);
+  });
+
+  app.post('/itinerary/ops', async (c) => {
+    const token = /^Bearer (.+)$/.exec(c.req.header('Authorization') ?? '')?.[1];
+    const device = token ? store.verifyDevice(token) : null;
+    if (!device) return c.json({ error: 'Unknown device; register again' }, 401);
+    const parsed = ItineraryOpsRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: 'Malformed itinerary ops', details: parsed.error.issues }, 422);
+    }
+    return c.json(store.applyItineraryOps(device, parsed.data.ops));
+  });
+
   // ---------- organizers ----------
 
   app.use('/admin/*', async (c, next) => {
@@ -116,6 +135,13 @@ export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEA
     const result = store.apply(body.changes, name, body.baseSeq as number | undefined);
     hub.publish({ epoch: store.epoch, ...result });
     return c.json({ from: result.from, to: result.to, count: result.changes.length });
+  });
+
+  app.get('/admin/stats', (c) => {
+    const titles = new Map(store.snapshot().sessions.map((s) => [s.id, s.title]));
+    return c.json({
+      sessions: store.popularity().map((p) => ({ ...p, title: titles.get(p.sessionId) ?? null })),
+    });
   });
 
   app.get('/admin/log', (c) => {

@@ -4,6 +4,7 @@ import { useSchedule } from '../data/schedule';
 import { KIND_LABEL, formatTime, shortDayLabel } from '../lib/format';
 import { StageName } from './StageName';
 import { StatusBadge } from './StatusBadge';
+import { SavedMarker } from './SaveButton';
 
 interface Props {
   session: Session;
@@ -32,6 +33,7 @@ export function SessionRow({ session: s, now = null, showDay = false }: Props) {
       </span>
       <span className="session-main">
         <span className="session-title">
+          <SavedMarker sessionId={s.id} />
           {s.title}
           {s.tags.map((t) => (
             <span key={t} className="tag">

@@ -36,6 +36,8 @@ test('a change is pushed to a connected app within 2 seconds', async ({ page, re
   await page.goto(`/session/${id}`);
   await expect(page.locator('.detail-title')).toBeVisible();
   await stream;
+  // Toasts are for sessions in the attendee's plan.
+  await page.getByRole('button', { name: 'Add to my plan' }).click();
   await page.waitForTimeout(300);
 
   const started = Date.now();

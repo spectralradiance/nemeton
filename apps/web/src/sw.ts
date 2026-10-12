@@ -10,6 +10,8 @@ import {
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst } from 'workbox-strategies';
 import { PHOTO_CACHE, PHOTO_MATCH, isPhotoUrl } from './lib/photos';
+import { db } from './data/db';
+import { flushOutbox } from './data/itinerary';
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -47,4 +49,16 @@ clientsClaim();
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
+
+// Background Sync (Chromium): send queued itinerary edits once the OS sees a connection, even if
+// the app was closed. A rejected promise tells the browser to retry later. Other browsers flush
+// from the page instead (on open, reconnect and return to the app).
+interface SyncEvent extends ExtendableEvent {
+  readonly tag: string;
+}
+
+self.addEventListener('sync' as keyof ServiceWorkerGlobalScopeEventMap, (event) => {
+  const e = event as SyncEvent;
+  if (e.tag === 'outbox') e.waitUntil(flushOutbox(db).then(() => undefined));
 });

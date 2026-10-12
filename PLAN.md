@@ -323,12 +323,39 @@ Each phase ends with something demoable and its exit criteria.
   - E2E: push under 2 s with no other trigger; changes made while offline arrive on reconnect; toast, badge and feed.
 - **Exit met:** pushes arrive well under 2 s (the whole e2e test, publish included, takes about 0.85 s), and changes published while offline arrive on reconnect.
 
-### Phase 5: Itinerary + outbox + Background Sync (≈1.5 weeks)
+### Phase 5: Itinerary + outbox + Background Sync ✅ done 2026-10-12 (real-device checks pending)
 
-- Anonymous identity, itinerary UI, clash detection, `.ics` export.
-- Outbox, idempotent server ops endpoint, Background Sync in the SW, fallback flush triggers.
-- HLC stamping and tombstones (groundwork for v2), plus popularity counts in `GET /admin/stats`.
-- **Exit:** the v1 test matrix (§7) passes, including "favorite offline → close tab → reconnect" on Chromium and "favorite offline → reopen app online" on iOS.
+- **Shared** (`packages/shared/src/itinerary.ts`):
+  - The `ItineraryOp` schema.
+  - A Hybrid Logical Clock: fixed-width base-36 strings that sort as time, never go backwards when the device clock does, and use a counter within one millisecond.
+  - `findClashes`, which treats back-to-back sessions and cancelled ones as not clashing.
+- **Server:**
+  - `POST /api/devices` issues an anonymous identity. The server picks the user id, and the token is HMAC-signed with a per-database key, so there's no token table. Resetting the database invalidates every token.
+  - `POST /api/itinerary/ops` is idempotent by `opId` (an `applied_ops` table) and last-writer-wins by HLC, so a late-arriving older op can't undo a newer one.
+  - `GET /api/admin/stats` gives anonymous popularity counts, and the CLI gains `npm run admin -- stats`.
+- **Client:**
+  - Dexie v3 adds `itinerary` (removals kept as tombstones), `outbox` and `device` (its own device id and last HLC, so the clock stays monotonic across reloads).
+  - Each save applies locally and queues the op in one transaction.
+  - The flush retries with exponential backoff (2 s up to 5 min). It deletes ops only after a 2xx, and drops and reports ops the server refuses (4xx).
+  - On a 401 it re-registers and resends the whole plan, tombstones included.
+- **Flush triggers:**
+  - The service worker's Background Sync (`sync` event, tag `outbox`; Chromium), which also works after the tab is closed.
+  - On start, reconnect and return to the app, and right after each edit.
+- **UI:**
+  - "Add to my plan" on each session, and stars in the list and grid.
+  - A **My plan** tab, by day, with clash warnings, organizer notes for delayed, moved or cancelled sessions, a "No longer on the schedule" section (titles are kept at save time) and remove buttons.
+  - A sync line ("2 changes saved on this device, will sync when you're back online").
+  - `.ics` export: UTC times, folded lines, stable UIDs, `STATUS:CANCELLED`.
+  - Saving the first session asks to keep the device's data.
+  - Change toasts now only fire for saved sessions. The Updates tab tags those "In your plan".
+- "Clear saved data" in Settings now keeps the plan and its unsent edits.
+- **Tests:** 117 unit and 20 e2e.
+  - Server: the v1 matrix (add/remove/add ending "added", a retried op applied once, a late older op ignored), forged and reset tokens, stats.
+  - Client outbox against the real server: offline queueing, a lost response retried exactly once, re-registration after a server reset, rejected ops dropped, monotonic clock.
+  - `.ics` and clashes.
+  - E2E: save offline then sync on reconnect, flags and toast on cancellation, orphan after deletion, clashes, the `.ics` download.
+- **Exit:** the v1 matrix passes in tests. The Background Sync "close the tab, then reconnect" path and the iOS "reopen online" path still need checking on real devices, along with the Phase 2 install checks.
+- **Bundle:** 143 KB gzipped, close to the 150 KB budget; `zod/mini` on the client is the obvious next saving. The service worker grew to 65 KB gzipped with Dexie and Zod, which is off the first-paint path.
 
 ### Phase 6: Hardening and polish (≈1 week)
 

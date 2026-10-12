@@ -70,3 +70,14 @@ export async function fetchLog(config: ApiConfig, limit: number): Promise<Change
   const body = (await request(config, `/admin/log?limit=${limit}`)) as { changes: unknown };
   return Change.array().parse(body.changes);
 }
+
+export interface SessionStats {
+  sessionId: string;
+  count: number;
+  title: string | null;
+}
+
+export async function fetchStats(config: ApiConfig): Promise<SessionStats[]> {
+  const body = (await request(config, '/admin/stats')) as { sessions: SessionStats[] };
+  return body.sessions;
+}
