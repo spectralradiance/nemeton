@@ -357,12 +357,61 @@ Each phase ends with something demoable and its exit criteria.
 - **Exit:** the v1 matrix passes in tests. The Background Sync "close the tab, then reconnect" path and the iOS "reopen online" path still need checking on real devices, along with the Phase 2 install checks.
 - **Bundle:** 143 KB gzipped, close to the 150 KB budget; `zod/mini` on the client is the obvious next saving. The service worker grew to 65 KB gzipped with Dexie and Zod, which is off the first-paint path.
 
-### Phase 6: Hardening and polish (≈1 week)
+### Phase 6: Hardening and polish ✅ done 2026-10-12
 
-- Schedule changes that affect the itinerary (cancelled/moved/orphaned states).
-- Accessibility pass, performance budget, error reporting, schema migration tests.
-- Load test SSE fan-out (target: 10k concurrent connections per instance, or document the scaling path).
-- **Exit:** performance budget met (below), no critical a11y issues, a migration from the previous schema version passes.
+- Itinerary states for organizer changes (cancelled, moved, removed) landed in Phase 5.
+- **Bundle:** the shared schemas moved to Zod Mini (same validation), taking the app from 143 to **128 KB gzipped** and the service worker from 65 to 48 KB.
+- **Bug fixed:** the outbox was read by `createdAt`, so edits made in the same millisecond could go out shuffled. It's now read in HLC order (Dexie v4 index).
+- **Migration tests:**
+  - A Phase 2 install (schema v1) re-downloads its schedule.
+  - A Phase 5 install (schema v3) keeps its plan and unsent edits through the v4 upgrade, and they still sync.
+  - A Phase 3 server database opens with its schedule, log and organizers intact and gains the new tables.
+- **Crash reporting:**
+  - The app reports uncaught errors, unhandled rejections and screen crashes to `POST /api/errors`: deduplicated, at most 10 per page load, no personal data, build version included.
+  - The server rate-limits to 10 per client per minute and keeps the last 1000.
+  - Organizers read them with `npm run admin -- errors [--stack]`.
+- **Accessibility:**
+  - axe-core scans every screen in light and dark against WCAG 2.1 A/AA, on desktop and phone (32 scans).
+  - The one finding, fixed: ended sessions were dimmed with opacity and failed contrast. They now use muted text plus a screen-reader "(ended)".
+  - Focus moves to the page content on in-app navigation.
+  - A `prefers-contrast: more` theme.
+  - A keyboard test: skip link, tabbing to the nav, focus following navigation.
+- **Performance budget**, measured in e2e on Chromium. All met:
+
+  | Budget                                                         | Measured    |
+  | -------------------------------------------------------------- | ----------- |
+  | App JS ≤ 150 KB gzipped                                        | 128.5 KB    |
+  | Repeat visit < 1 s, mid-range phone (4× CPU slowdown, offline) | ~250–290 ms |
+  | Apply 100 changes < 50 ms                                      | ~35–38 ms   |
+  | Snapshot ≤ 300 KB compressed (now gzipped by the server)       | 22.2 KB     |
+
+- **SSE load test** (`npm run load:sse -- <connections>`): a separate server process with a throwaway database, measured on this dev laptop with the load generator on the same machine.
+
+  | Connections | Server memory | Change reaches all (p50 / max) |
+  | ----------- | ------------- | ------------------------------ |
+  | 1,000       | 153 MB        | 20–31 ms / 38 ms               |
+  | 5,000       | 312 MB        | 74–99 ms / 144 ms              |
+  | 10,000      | 443 MB        | 160–363 ms / 553 ms            |
+
+  10k connections per instance is met, with change delivery well under the 2 s target. Each batch is now serialized once for all streams.
+  - **Scaling path beyond one instance:** put Postgres `LISTEN/NOTIFY` (or Redis pub/sub) behind `ChangeHub` and run several stateless instances behind a load balancer.
+  - Raise the OS file-descriptor limit (about 1 per connection).
+  - Keep `/events` uncompressed and unbuffered at any proxy (`X-Accel-Buffering: no` for nginx).
+
+- **Exit met:** budget met, no automated a11y violations, migrations pass.
+
+### Before the December festivals: manual checks on real devices
+
+Automated tests can't cover these. They need the app at an HTTPS address a phone can reach (hosting or a temporary tunnel).
+
+1. **Install:** Android Chrome, iPhone Safari (Share → Add to Home Screen) and desktop Chrome or Edge. The icon looks right, the app opens full screen and the theme color is right.
+2. **Offline:** after one visit, airplane mode, then cold-start the installed app. The schedule, lineup, session detail, saved photos and My plan all work.
+3. **Background Sync (Android):** save a session offline, close the app completely, turn the network back on, and check `npm run admin -- stats` shows it without reopening the app.
+4. **iPhone plan sync:** save offline, reopen the app online, and check the save arrives.
+5. **Live updates:** with the app open on a phone, `npm run admin -- delay …` shows a toast within about 2 s (for a saved session). Lock the phone, publish, unlock, and check it catches up.
+6. **Storage:** after an iPhone week of not opening the installed app, the plan is still there (the "Keep data on this device" request).
+7. **Screen readers:** VoiceOver (iOS) and TalkBack (Android) can browse the schedule, save a session and hear toasts.
+8. **Sunlight:** check readability outdoors at full brightness, in both themes.
 
 ### v2: Cross-device itinerary sync (≈1.5 weeks)
 

@@ -173,7 +173,8 @@ export async function applyChangesToDb(
   database: NemetonDB,
   batch: ChangesResponse,
 ): Promise<FeedItem[]> {
-  return database.transaction(
+  const started = performance.now();
+  const feed = await database.transaction(
     'rw',
     [
       database.festival,
@@ -228,6 +229,13 @@ export async function applyChangesToDb(
       return feed;
     },
   );
+  // Visible in the browser's performance timeline; the e2e budget test reads it.
+  performance.measure('nemeton:apply-changes', {
+    start: started,
+    end: performance.now(),
+    detail: { count: batch.changes.length },
+  });
+  return feed;
 }
 
 /** Adds feed items, keeping only the newest FEED_LIMIT. */

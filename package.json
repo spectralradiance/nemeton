@@ -20,7 +20,8 @@
     "preview": "npm run build && concurrently -k -n server,web -c green,blue \"npm:start:server\" \"npm run preview -w @nemeton/web\"",
     "test:e2e": "playwright test",
     "admin": "tsx apps/cli/src/main.ts",
-    "db:reset": "tsx apps/cli/src/main.ts reset-db"
+    "db:reset": "tsx apps/cli/src/main.ts reset-db",
+    "load:sse": "tsx scripts/load-sse.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

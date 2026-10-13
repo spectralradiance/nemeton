@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { compress } from 'hono/compress';
 import { ItineraryOpsRequest, type ChangesResponse, type SnapshotResponse } from '@nemeton/shared';
-import { ChangeHub } from './hub';
+import { ChangeHub, type PublishedBatch } from './hub';
 import { StoreError, type Organizer, type Store } from './store';
 
 type Env = { Variables: { organizer: Organizer } };
@@ -12,9 +13,21 @@ const ERRORS_PER_MINUTE = 10;
 export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEARTBEAT_MS) {
   const app = new Hono<Env>().basePath('/api');
 
-  app.get('/health', (c) => c.json({ ok: true, epoch: store.epoch, seq: store.seq }));
+  app.get('/health', (c) =>
+    c.json({
+      ok: true,
+      epoch: store.epoch,
+      seq: store.seq,
+      /** Open live-update connections. */
+      streams: hub.size,
+      rssMb: Math.round(process.memoryUsage().rss / 1_048_576),
+    }),
+  );
 
   // ---------- public: schedule ----------
+
+  // Schedule JSON compresses about 4x. Not /events: compression would buffer the live stream.
+  app.use('/schedule/*', compress());
 
   app.get('/schedule/snapshot', (c) => {
     const etag = `"${store.epoch}:${store.seq}"`;
@@ -55,15 +68,15 @@ export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEA
     const epoch = c.req.query('epoch');
 
     return streamSSE(c, async (stream) => {
-      const send = (batch: ChangesResponse) =>
-        stream.writeSSE({ event: 'changes', id: String(batch.to), data: JSON.stringify(batch) });
+      const send = ({ batch, data }: PublishedBatch) =>
+        stream.writeSSE({ event: 'changes', id: String(batch.to), data });
 
       // Buffer live batches until the replay has been sent, so nothing arrives out of order.
-      const pending: ChangesResponse[] = [];
+      const pending: PublishedBatch[] = [];
       let replayed = false;
-      const unsubscribe = hub.subscribe((batch) => {
-        if (replayed) void send(batch);
-        else pending.push(batch);
+      const unsubscribe = hub.subscribe((published) => {
+        if (replayed) void send(published);
+        else pending.push(published);
       });
       stream.onAbort(unsubscribe);
 
@@ -78,8 +91,11 @@ export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEA
         return;
       }
       const to = missed.at(-1)?.seq ?? since;
-      if (missed.length > 0) await send({ epoch: store.epoch, from: since, to, changes: missed });
-      for (const batch of pending.filter((b) => b.to > to)) await send(batch);
+      if (missed.length > 0) {
+        const batch = { epoch: store.epoch, from: since, to, changes: missed };
+        await send({ batch, data: JSON.stringify(batch) });
+      }
+      for (const published of pending.filter((p) => p.batch.to > to)) await send(published);
       replayed = true;
 
       // Comments keep proxies and mobile networks from closing an idle connection.

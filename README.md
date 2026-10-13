@@ -14,15 +14,16 @@ npm run dev          # API on :8787, web app on :5317
 
 The first server start creates `data/nemeton.db` from `data/seed/festival.json`.
 
-| Command              | What it does                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| `npm run dev`        | API + web app with hot reload. The service worker is off in dev.                            |
-| `npm run preview`    | Production build on :5318 with the service worker, for trying offline behavior              |
-| `npm test`           | Unit tests (Vitest)                                                                         |
-| `npm run test:e2e`   | Browser tests against a production build: offline, deltas, photos. Uses the installed Edge. |
-| `npm run typecheck`  | TypeScript across all packages                                                              |
-| `npm run import:csv` | Rebuild `data/seed/festival.json` from the organizer CSV in `data/raw/`                     |
-| `npm run db:reset`   | Delete the database so the next server start re-seeds it                                    |
+| Command                    | What it does                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `npm run dev`              | API + web app with hot reload. The service worker is off in dev.                            |
+| `npm run preview`          | Production build on :5318 with the service worker, for trying offline behavior              |
+| `npm test`                 | Unit tests (Vitest)                                                                         |
+| `npm run test:e2e`         | Browser tests against a production build: offline, deltas, photos. Uses the installed Edge. |
+| `npm run typecheck`        | TypeScript across all packages                                                              |
+| `npm run import:csv`       | Rebuild `data/seed/festival.json` from the organizer CSV in `data/raw/`                     |
+| `npm run db:reset`         | Delete the database so the next server start re-seeds it                                    |
+| `npm run load:sse -- 5000` | Load-test live updates with N connections against a throwaway server                        |
 
 **Demo clock:** add `?now=2026-06-20T20:40` to any URL to pretend it's that festival-local time
 (`?now=off` resets it). This shows "On now", the now-line and dimmed past sets with past data.
@@ -53,6 +54,7 @@ npm run admin -- restore rewilding-the-selkie-sun
 npm run admin -- import data/raw/cascadian-midsummer-2026.csv
 npm run admin -- log
 npm run admin -- stats               # which sessions attendees saved most (anonymous counts)
+npm run admin -- errors --stack      # crash reports from attendees' apps
 ```
 
 - Every change shows exactly what will change and asks before publishing. `--dry-run` only

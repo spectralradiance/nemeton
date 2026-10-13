@@ -40,7 +40,7 @@ describe('POST /api/errors', () => {
     const list = await app.request('/api/admin/errors', {
       headers: { Authorization: `Bearer ${token}` },
     });
-    expect((await list.json()).errors).toEqual([
+    expect(((await list.json()) as { errors: unknown[] }).errors).toEqual([
       expect.objectContaining({
         message: 'TypeError: x is undefined',
         path: '/plan',
