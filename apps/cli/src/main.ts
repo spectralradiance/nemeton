@@ -4,7 +4,16 @@ import { parseArgs } from 'node:util';
 import { diffSnapshots, type ChangeInput, type Session, type Snapshot } from '@nemeton/shared';
 import { CsvImportError, importFestivalCsv } from '@nemeton/shared/import';
 import { DEFAULT_DB, openStore } from '@nemeton/server';
-import { ApiError, apiConfig, fetchLog, fetchSnapshot, fetchStats, publish, whoami } from './api';
+import {
+  ApiError,
+  apiConfig,
+  fetchErrors,
+  fetchLog,
+  fetchSnapshot,
+  fetchStats,
+  publish,
+  whoami,
+} from './api';
 import { describeChanges } from './describe';
 import { UsageError, delaySession, findSession, moveSession, parseDuration } from './edits';
 
@@ -22,6 +31,7 @@ Schedule changes (talk to the server; need NEMETON_TOKEN):
                                     Publish the differences between a spreadsheet and the live schedule
   log [--limit N]                   Recent changes and who made them
   stats [--limit N]                 Sessions by how many attendees saved them (anonymous counts)
+  errors [--limit N] [--stack]      Recent crash reports from attendees' apps
   whoami                            Check your token
 
   Options for changes: --note "…" (shown to attendees), --dry-run, --yes (skip the confirmation)
@@ -50,6 +60,7 @@ const { values: opts, positionals } = parseArgs({
     'dry-run': { type: 'boolean' },
     yes: { type: 'boolean', short: 'y' },
     help: { type: 'boolean', short: 'h' },
+    stack: { type: 'boolean' },
   },
 });
 const api = apiConfig(opts.token);
@@ -76,6 +87,8 @@ async function main() {
       return showLog();
     case 'stats':
       return showStats();
+    case 'errors':
+      return showErrors();
     case 'whoami': {
       const me = await whoami(api);
       return console.log(`Signed in as ${me.name} (${me.id}) on ${api.base}`);
@@ -200,6 +213,17 @@ async function showStats() {
     console.log(`${String(s.count).padStart(width)}  ${s.title ?? `(removed) ${s.sessionId}`}`);
   }
   if (stats.length > limit) console.log(`… and ${stats.length - limit} more (--limit N)`);
+}
+
+async function showErrors() {
+  const errors = await fetchErrors(api, Number(opts.limit ?? 20));
+  if (errors.length === 0) return console.log('No crash reports.');
+  for (const e of errors) {
+    const when = new Date(e.at).toLocaleString('sv-SE').slice(0, 16);
+    console.log(`${when}  ${e.path ?? ''}  [${e.version ?? '?'}]
+  ${e.message}`);
+    if (opts.stack && e.stack) console.log(e.stack.replace(/^/gm, '    '));
+  }
 }
 
 // ---------- local server administration ----------

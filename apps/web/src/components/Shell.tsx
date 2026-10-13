@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
 import { useSchedule } from '../data/schedule';
 import { applyClockParam, resetClock, useClockOffset, useNow } from '../lib/clock';
@@ -38,8 +38,16 @@ export function Shell({ children }: { children: ReactNode }) {
     }
   }, [search, festival, navigate]);
 
+  // On in-app navigation, move focus to the new content so screen readers announce the page
+  // (a full page load does this by itself, so skip the first render).
+  const firstRender = useRef(true);
   useEffect(() => {
     window.scrollTo(0, 0);
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    document.getElementById('main')?.focus({ preventScroll: true });
   }, [location]);
 
   return (
@@ -84,7 +92,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </header>
       <ClockBanner />
       <ChangeToast />
-      <main id="main" className="main">
+      <main id="main" className="main" tabIndex={-1}>
         {children}
       </main>
     </>

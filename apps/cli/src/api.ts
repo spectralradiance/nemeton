@@ -87,3 +87,20 @@ export async function fetchStats(config: ApiConfig): Promise<SessionStats[]> {
   const body = (await request(config, '/admin/stats')) as { sessions: SessionStats[] };
   return body.sessions;
 }
+
+export interface ClientErrorReport {
+  id: number;
+  at: string;
+  message: string;
+  stack: string | null;
+  path: string | null;
+  version: string | null;
+  userAgent: string | null;
+}
+
+export async function fetchErrors(config: ApiConfig, limit: number): Promise<ClientErrorReport[]> {
+  const body = (await request(config, `/admin/errors?limit=${limit}`)) as {
+    errors: ClientErrorReport[];
+  };
+  return body.errors;
+}

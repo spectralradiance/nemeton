@@ -7,6 +7,7 @@ import { StoreError, type Organizer, type Store } from './store';
 type Env = { Variables: { organizer: Organizer } };
 
 const HEARTBEAT_MS = 25_000;
+const ERRORS_PER_MINUTE = 10;
 
 export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEARTBEAT_MS) {
   const app = new Hono<Env>().basePath('/api');
@@ -108,6 +109,38 @@ export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEA
     return c.json(store.applyItineraryOps(device, parsed.data.ops));
   });
 
+  // ---------- crash reports from attendees' apps ----------
+
+  // A crash loop on many phones mustn't flood the database: a few reports per client per minute.
+  const reportsByClient = new Map<string, { count: number; windowStart: number }>();
+  app.post('/errors', async (c) => {
+    const client = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+    const now = Date.now();
+    const bucket = reportsByClient.get(client);
+    if (!bucket || now - bucket.windowStart > 60_000) {
+      reportsByClient.set(client, { count: 1, windowStart: now });
+      if (reportsByClient.size > 10_000) reportsByClient.clear();
+    } else if (++bucket.count > ERRORS_PER_MINUTE) {
+      return c.body(null, 429);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (typeof body?.message !== 'string' || body.message.length === 0) {
+      return c.json({ error: 'Expected { message }' }, 400);
+    }
+    const text = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : null);
+    const report = {
+      message: body.message.slice(0, 500),
+      stack: text(body.stack, 4000),
+      path: text(body.path, 200),
+      version: text(body.version, 64),
+      userAgent: text(c.req.header('User-Agent'), 300),
+    };
+    store.recordClientError(report);
+    console.warn(JSON.stringify({ type: 'client-error', ...report, stack: undefined }));
+    return c.body(null, 204);
+  });
+
   // ---------- organizers ----------
 
   app.use('/admin/*', async (c, next) => {
@@ -142,6 +175,11 @@ export function createApp(store: Store, hub = new ChangeHub(), heartbeatMs = HEA
     return c.json({
       sessions: store.popularity().map((p) => ({ ...p, title: titles.get(p.sessionId) ?? null })),
     });
+  });
+
+  app.get('/admin/errors', (c) => {
+    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 20) || 20, 1), 500);
+    return c.json({ errors: store.clientErrors(limit) });
   });
 
   app.get('/admin/log', (c) => {

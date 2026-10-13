@@ -381,7 +381,12 @@ h2 {
 .session-row:hover {
   background: var(--surface-2);
 }
-.session-row[data-past] {
+/* Ended sessions recede, but stay readable (WCAG AA contrast): muted text, not transparency. */
+.session-row[data-past] .session-title {
+  color: var(--muted);
+  font-weight: 500;
+}
+.session-row[data-past] .stage-name::before {
   opacity: 0.5;
 }
 .session-row[data-status='cancelled'] .session-title {
@@ -619,7 +624,12 @@ h2 {
   border-left-style: dotted;
 }
 .grid-block[data-past] {
-  opacity: 0.45;
+  background: var(--surface-2);
+  border-left-color: color-mix(in srgb, var(--stage) 40%, var(--surface-2));
+}
+.grid-block[data-past] .grid-block-title {
+  color: var(--muted);
+  font-weight: 600;
 }
 .grid-block[data-status='cancelled'] .grid-block-title {
   text-decoration: line-through;
@@ -1246,4 +1256,34 @@ h2 {
 /* Everything on My plan is saved; the remove button already shows the star. */
 .plan-item .saved-marker {
   display: none;
+}
+
+/* ---------- Phase 6: accessibility ---------- */
+
+/* Focus lands on <main> after navigation for screen readers; it isn't a control, so no ring. */
+main:focus {
+  outline: none;
+}
+
+/* Higher contrast on request (also helps reading in bright sun). */
+@media (prefers-contrast: more) {
+  :root {
+    --muted: #3d3a33;
+    --line: #9c947f;
+    --surface-2: #e2dccb;
+  }
+  .session-row,
+  .card,
+  .feed-item,
+  .plan-item,
+  .grid-block {
+    border-width: 2px;
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --muted: #d2ccbd;
+    --line: #6b7160;
+    --surface-2: #2c3125;
+  }
 }

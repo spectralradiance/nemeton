@@ -6,6 +6,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 const api = process.env.API_URL ?? 'http://localhost:8787';
 
 export default defineConfig({
+  // Shown in crash reports, to tell which build an error came from.
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      process.env.APP_VERSION ?? new Date().toISOString().slice(0, 16).replace('T', ' '),
+    ),
+  },
   plugins: [
     react(),
     VitePWA({

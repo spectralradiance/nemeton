@@ -41,6 +41,7 @@ export function SessionRow({ session: s, now = null, showDay = false }: Props) {
             </span>
           ))}
           <StatusBadge session={s} />
+          {past && <span className="visually-hidden"> (ended)</span>}
         </span>
         <span className="session-meta">
           <StageName stageId={s.stageId} />

@@ -65,7 +65,25 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS applied_ops (
     op_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, applied_at TEXT NOT NULL
   );
+  -- Crash reports from attendees' apps. Capped; no personal data.
+  CREATE TABLE IF NOT EXISTS client_errors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, message TEXT NOT NULL,
+    stack TEXT, path TEXT, version TEXT, user_agent TEXT
+  );
 `;
+
+export interface ClientError {
+  id: number;
+  at: string;
+  message: string;
+  stack: string | null;
+  path: string | null;
+  version: string | null;
+  userAgent: string | null;
+}
+
+/** How many crash reports to keep. */
+const CLIENT_ERROR_LIMIT = 1000;
 
 export interface Device {
   userId: string;
@@ -355,6 +373,39 @@ export class Store {
         )
         .all() as { session_id: string; count: number }[]
     ).map((r) => ({ sessionId: r.session_id, count: Number(r.count) }));
+  }
+
+  // ---------- crash reports ----------
+
+  recordClientError(report: Omit<ClientError, 'id' | 'at'>) {
+    this.db
+      .prepare(
+        'INSERT INTO client_errors (at, message, stack, path, version, user_agent) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        new Date().toISOString(),
+        report.message,
+        report.stack,
+        report.path,
+        report.version,
+        report.userAgent,
+      );
+    this.db
+      .prepare('DELETE FROM client_errors WHERE id <= (SELECT MAX(id) FROM client_errors) - ?')
+      .run(CLIENT_ERROR_LIMIT);
+  }
+
+  /** Most recent first. */
+  clientErrors(limit = 50): ClientError[] {
+    return (
+      this.db
+        .prepare(
+          'SELECT id, at, message, stack, path, version, user_agent FROM client_errors ORDER BY id DESC LIMIT ?',
+        )
+        .all(limit) as unknown as Array<
+        Omit<ClientError, 'userAgent'> & { user_agent: string | null }
+      >
+    ).map(({ user_agent, ...e }) => ({ ...e, userAgent: user_agent }));
   }
 
   // ---------- organizers ----------

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { reportError } from '../lib/errors';
 
 /** Keeps the shell usable if one screen throws, instead of blanking the whole app. */
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -10,6 +11,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(error, info.componentStack);
+    reportError(error, 'Screen crashed');
   }
 
   render() {
