@@ -67,7 +67,7 @@ export async function flushOutbox(
   let sent = 0;
   let reRegistered = false;
   for (;;) {
-    const ops = await database.outbox.orderBy('createdAt').limit(BATCH).toArray();
+    const ops = await database.outbox.orderBy('hlc').limit(BATCH).toArray();
     if (ops.length === 0) return { sent };
 
     const device = await register(database, fetchImpl);

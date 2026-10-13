@@ -98,6 +98,8 @@ export class NemetonDB extends Dexie {
     });
     this.version(2).stores({ feed: 'seq' });
     this.version(3).stores({ itinerary: 'sessionId, state', outbox: 'opId, createdAt', device: 'key' });
+    // v4: the outbox is sent in clock order (unique and increasing), not creation time (ties).
+    this.version(4).stores({ outbox: 'opId, createdAt, hlc' });
   }
 }
 

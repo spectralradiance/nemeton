@@ -49,7 +49,8 @@ describe('plan edits offline', () => {
     await setInPlan(db, 'hail-fri', true);
     await setInPlan(db, 'hail-fri', false);
     await setInPlan(db, 'hail-fri', true);
-    const hlcs = (await db.outbox.orderBy('createdAt').toArray()).map((o) => o.hlc);
+    const hlcs = (await db.outbox.orderBy('hlc').toArray()).map((o) => o.hlc);
+    expect(hlcs).toHaveLength(3);
     expect([...hlcs].sort()).toEqual(hlcs);
 
     expect(await flushOutbox(db, online)).toEqual({ sent: 3 });

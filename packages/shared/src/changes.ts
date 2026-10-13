@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod/mini';
 import { Festival, Session, Snapshot, Stage, Vendor } from './schema';
 
 // The change log is the only way official schedule data changes. Every change has a seq number;
@@ -21,17 +21,17 @@ export const ChangeInput = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('upsert'),
     entity: EntityKind,
-    id: z.string().min(1),
+    id: z.string().check(z.minLength(1)),
     data: z.unknown(),
   }),
-  z.object({ op: z.literal('delete'), entity: EntityKind, id: z.string().min(1) }),
+  z.object({ op: z.literal('delete'), entity: EntityKind, id: z.string().check(z.minLength(1)) }),
 ]);
 export type ChangeInput = z.infer<typeof ChangeInput>;
 
 export const Change = z.intersection(
   ChangeInput,
   z.object({
-    seq: z.number().int().positive(),
+    seq: z.int().check(z.minimum(1)),
     at: z.iso.datetime(),
     /** Organizer who made the change. */
     author: z.string(),
@@ -39,12 +39,14 @@ export const Change = z.intersection(
 );
 export type Change = z.infer<typeof Change>;
 
+export const ChangeList = z.array(Change);
+
 export const ChangesResponse = z.object({
   epoch: z.string(),
   /** The `since` the client asked for. */
-  from: z.number().int().min(0),
+  from: z.int().check(z.minimum(0)),
   /** The server's latest seq; the client is up to date at this point after applying. */
-  to: z.number().int().min(0),
+  to: z.int().check(z.minimum(0)),
   changes: z.array(Change),
 });
 export type ChangesResponse = z.infer<typeof ChangesResponse>;

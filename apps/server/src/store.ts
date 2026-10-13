@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import * as z from 'zod/mini';
 import {
   ChangeInput,
   FESTIVAL_ID,
@@ -197,7 +198,7 @@ export class Store {
    * With `baseSeq`, refuses (409) if anything changed since the caller looked.
    */
   apply(input: unknown[], author: string, baseSeq?: number): ApplyResult {
-    const parsed = ChangeInput.array().min(1).safeParse(input);
+    const parsed = z.array(ChangeInput).check(z.minLength(1)).safeParse(input);
     if (!parsed.success) throw new StoreError('Malformed changes', 422, parsed.error.issues);
     const changes = parsed.data;
 

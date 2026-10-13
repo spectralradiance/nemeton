@@ -1,7 +1,10 @@
-import { z } from 'zod';
+import * as z from 'zod/mini';
+
+// Schemas use Zod Mini: the same validation as full Zod at a quarter of the bundle size, which
+// matters because the web app ships these to every phone.
 
 /** A calendar date in the festival's timezone, e.g. "2026-06-19". */
-const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const IsoDate = z.string().check(z.regex(/^\d{4}-\d{2}-\d{2}$/));
 /** A UTC instant, e.g. "2026-06-19T21:00:00.000Z". */
 const UtcInstant = z.iso.datetime();
 
@@ -17,15 +20,15 @@ export const Festival = z.object({
   /** IANA zone. All times are displayed in this zone, never the device's. */
   timezone: z.string(),
   /** Minutes after local midnight when one festival day rolls over to the next (e.g. 360 = 06:00). */
-  dayBoundaryMinutes: z.number().int().min(0).max(720),
-  days: z.array(FestivalDay).min(1),
+  dayBoundaryMinutes: z.int().check(z.minimum(0), z.maximum(720)),
+  days: z.array(FestivalDay).check(z.minLength(1)),
 });
 export type Festival = z.infer<typeof Festival>;
 
 export const Stage = z.object({
   id: z.string(),
   name: z.string(),
-  order: z.number().int(),
+  order: z.int(),
 });
 export type Stage = z.infer<typeof Stage>;
 
@@ -47,28 +50,28 @@ export const Session = z.object({
   kind: SessionKind,
   title: z.string(),
   /** Longer form of the title, e.g. "In Defense of the World Tree". */
-  subtitle: z.string().optional(),
+  subtitle: z.optional(z.string()),
   /** Qualifiers pulled out of the title, e.g. "drop-in", "family programming". */
   tags: z.array(z.string()),
   /** Festival day this session belongs to (FestivalDay.date). */
   day: IsoDate,
   /** null = runs all day ("Ongoing"). */
-  startsAt: UtcInstant.nullable(),
+  startsAt: z.nullable(UtcInstant),
   /** null = end time not published; the UI estimates one. */
-  endsAt: UtcInstant.nullable(),
+  endsAt: z.nullable(UtcInstant),
   stageId: z.string(),
   /** Performers or workshop facilitators. */
   people: z.array(z.string()),
   /** Where the act is from, e.g. "Oregon". */
-  origin: z.string().optional(),
+  origin: z.optional(z.string()),
   /** What the session is about. Paragraphs are separated by blank lines. */
-  description: z.string().optional(),
+  description: z.optional(z.string()),
   /** About the performers or facilitators. Paragraphs are separated by blank lines. */
-  bio: z.string().optional(),
-  photo: z.url().optional(),
+  bio: z.optional(z.string()),
+  photo: z.optional(z.url()),
   links: z.array(Link),
   status: SessionStatus,
-  note: z.string().optional(),
+  note: z.optional(z.string()),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -81,15 +84,19 @@ export type Vendor = z.infer<typeof Vendor>;
 
 const SnapshotFields = z.object({
   /** Change-log sequence number this snapshot reflects. */
-  seq: z.number().int().min(0),
+  seq: z.int().check(z.minimum(0)),
   festival: Festival,
   stages: z.array(Stage),
   sessions: z.array(Session),
   vendors: z.array(Vendor),
 });
 
+interface IssueSink {
+  addIssue(issue: { code: 'custom'; message: string; path: (string | number)[] }): void;
+}
+
 /** Cross-record checks: unique ids, and sessions pointing at real stages and festival days. */
-function checkReferences(snap: z.infer<typeof SnapshotFields>, ctx: z.RefinementCtx) {
+function checkReferences(snap: z.infer<typeof SnapshotFields>, ctx: IssueSink) {
   const stageIds = new Set(snap.stages.map((s) => s.id));
   const days = new Set(snap.festival.days.map((d) => d.date));
   for (const [list, name] of [
@@ -124,14 +131,14 @@ function checkReferences(snap: z.infer<typeof SnapshotFields>, ctx: z.Refinement
   });
 }
 
-export const Snapshot = SnapshotFields.superRefine(checkReferences);
+export const Snapshot = SnapshotFields.check(z.superRefine(checkReferences));
 export type Snapshot = z.infer<typeof Snapshot>;
 
 /**
  * What the server sends: a snapshot plus the epoch of the database it came from. A new epoch
  * (e.g. the server's data was reset) means local seq numbers mean nothing and must be discarded.
  */
-export const SnapshotResponse = SnapshotFields.extend({ epoch: z.string() }).superRefine(
-  checkReferences,
-);
+export const SnapshotResponse = z
+  .extend(SnapshotFields, { epoch: z.string() })
+  .check(z.superRefine(checkReferences));
 export type SnapshotResponse = z.infer<typeof SnapshotResponse>;

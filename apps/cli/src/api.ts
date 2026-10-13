@@ -1,4 +1,10 @@
-import { Change, SnapshotResponse, type ChangeInput, type Snapshot } from '@nemeton/shared';
+import {
+  ChangeList,
+  SnapshotResponse,
+  type Change,
+  type ChangeInput,
+  type Snapshot,
+} from '@nemeton/shared';
 
 // Thin client for the organizer API. Configure with NEMETON_API and NEMETON_TOKEN.
 
@@ -68,7 +74,7 @@ export async function publish(
 
 export async function fetchLog(config: ApiConfig, limit: number): Promise<Change[]> {
   const body = (await request(config, `/admin/log?limit=${limit}`)) as { changes: unknown };
-  return Change.array().parse(body.changes);
+  return ChangeList.parse(body.changes);
 }
 
 export interface SessionStats {

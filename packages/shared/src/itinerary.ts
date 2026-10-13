@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod/mini';
 import type { Session } from './schema';
 import type { SessionEnd } from './schedule';
 
@@ -12,14 +12,16 @@ export type ItineraryState = z.infer<typeof ItineraryState>;
 export const ItineraryOp = z.object({
   /** Idempotency key: the server applies each op id at most once. */
   opId: z.uuid(),
-  sessionId: z.string().min(1),
+  sessionId: z.string().check(z.minLength(1)),
   /** 'removed' is a tombstone: it must win over an older 'added' from anywhere. */
   state: ItineraryState,
-  hlc: z.string().regex(/^[0-9a-z]{11}-[0-9a-z]{4}-.+$/),
+  hlc: z.string().check(z.regex(/^[0-9a-z]{11}-[0-9a-z]{4}-.+$/)),
 });
 export type ItineraryOp = z.infer<typeof ItineraryOp>;
 
-export const ItineraryOpsRequest = z.object({ ops: z.array(ItineraryOp).min(1).max(500) });
+export const ItineraryOpsRequest = z.object({
+  ops: z.array(ItineraryOp).check(z.minLength(1), z.maxLength(500)),
+});
 
 export const DeviceRegistration = z.object({
   userId: z.string(),

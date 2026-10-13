@@ -11,7 +11,8 @@
   "dependencies": {
     "@hono/node-server": "^2.1.4",
     "@nemeton/shared": "*",
-    "hono": "^4.13.13"
+    "hono": "^4.13.13",
+    "zod": "^4.6.5"
   },
   "exports": {
     ".": "./src/index.ts",
